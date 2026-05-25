@@ -1,0 +1,20 @@
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/hysyquay302/HSQLibrary")
+            credentials {
+                // --- SỬA LẠI CHỖ NÀY ---
+                // Truy cập trực tiếp vào thuộc tính, không cần settings. hay project.
+                username = GPR_USER
+                password = GPR_TOKEN
+            }
+        }
+    }
+}
+include ':app'
+rootProject.name = "SHTools"
