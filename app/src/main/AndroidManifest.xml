@@ -101,7 +101,7 @@
         </receiver>
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.quayquay.shtools.FileProvider"
+            android:authorities="${applicationId}.FileProvider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

@@ -1462,6 +1462,38 @@ public class StartAuto extends HSQService
                                                                     // TẦNG 2: DÙNG MẮT THẦN THÔNG MINH (ASBL -> XML -> OCR)
                                                                     List<HSQTools.TextBlock> smartList = getCheckAnswerSmart();
 
+                                                                    // 🌟 2.1: KIỂM TRA ĐẶC NHIỆM (ĐẠI ĐỘI NÚT TRỐNG)
+                                                                    // Cứu cánh nếu Gemini bảo bấm ">" nhưng XML đéo có text
+                                                                    if (isArrow || targetNorm.equals(">") || targetNorm.equals(">>") || targetNorm.equals("->")) {
+                                                                        try {
+                                                                            String xmlForArrow = HSQTools.getFlexibleXML();
+                                                                            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+                                                                            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+                                                                            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xmlForArrow.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                                                                            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+                                                                            for (int i = 0; i < nodes.getLength(); i++) {
+                                                                                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                                                                                String clazz = node.getAttribute("class");
+                                                                                String text = node.getAttribute("text");
+                                                                                String desc = node.getAttribute("content-desc");
+
+                                                                                // Nút nằm ở nửa dưới, là dạng Button/Image, đéo có chữ
+                                                                                if ((clazz.contains("Button") || clazz.contains("ImageView") || clazz.contains("Image"))
+                                                                                        && text.trim().isEmpty() && desc.trim().isEmpty()) {
+
+                                                                                    android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                                                                                    if (r != null && r.centerY() > 1000) { // Nằm nửa dưới màn hình
+                                                                                        updateNotificationContent("Tóm được NÚT ẢNH TRỐNG (Nghi ngờ là dấu >) tại " + r.centerX() + "," + r.centerY());
+                                                                                        click(r.centerX(), r.centerY(), false);
+                                                                                        break checkButtonAgainLoop;
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        } catch (Exception ignored) {}
+                                                                    }
+
+                                                                    // 🌟 2.2: LƯỚI QUÉT TIÊU CHUẨN (CÓ CHỮ THÌ MỚI BẤM)
                                                                     HSQTools.TextBlock btnSmart = smartList.stream()
                                                                             .filter(x -> x.y > 180)
                                                                             .filter(x ->
@@ -1494,7 +1526,7 @@ public class StartAuto extends HSQService
                                                                                 // 🌟 ƯU TIÊN 2: Bộ từ khóa dự phòng cho các kịch bản cũ / Click mù
                                                                                 return clean.matches("^(continue|next|submit|tieptuc|tieptheo|tieptheo>|done|gui|send|batdau|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep)$");
                                                                             })
-                                                                            .max(Comparator.comparingInt((HSQTools.TextBlock x) -> x.y))
+                                                                            .max(Comparator.comparingInt((HSQTools.TextBlock x) -> x.y)) // Ưu tiên nút ở THẤP NHẤT
                                                                             .orElse(null);
 
                                                                     if (btnSmart != null)
@@ -2750,9 +2782,13 @@ public class StartAuto extends HSQService
     {
         if (VCode < apkVersion)
         {
-            updateNotificationContent("down apk " + apkVersion);
+            show();
+            delay(2000);
+            updateContent("down apk " + apkVersion);
+            beginInstall:
             while (true)
             {
+                int tryReinstall = 1;
                 String linkDownLoad;
                 String filePath = "/sdcard/Download/SHTools.apk";
                 if (HSQHttps.isServerReachable("http://" + localServerIp + ":5000"))
@@ -2775,9 +2811,26 @@ public class StartAuto extends HSQService
                         {
                             AppInstaller.installApk(HSQConfig.getContext(), filePath);
                             delay(2000);
-                            findAndClickByTextDes("install", true, false, true, false, 30);
+                            while(true)
+                            {
+                                int checkInstall = ASBLBridgeService.findMultiTextDesWindow(60, true, true, true, false, "install", "there was a problem parsing the package");
+                                if (checkInstall == 2 || checkInstall == 0)
+                                {
+                                    updateContent("Lỗi cài apk " + tryReinstall);
+                                    if(tryReinstall < 3) {
+                                        delay(5000);
+                                        tryReinstall++;
+                                        continue;
+                                    }
+                                    delay(180000);
+                                    continue beginInstall;
+                                }
+                                else {
+                                    break;
+                                }
+                            }
                             delay(3000);
-                            findAndClickByTextDes("decline", true, false, true, false, 180);
+                            ASBLBridgeService.findMultiTextDesWindow(360, true, true, true, false, "decline" );
                             delay(3600000);
                             return true;
                         }
@@ -2785,6 +2838,7 @@ public class StartAuto extends HSQService
                 }
                 else
                 {
+                    updateContent("down apk dp" + apkVersion);
                     String linkDownLoadDP = "http://quaykute.id.vn/apk/SHTools" + apkVersion + ".apk";
                     if (HSQHttps.downloadFile(linkDownLoadDP, fileDeLuu))
                     {
@@ -2797,9 +2851,26 @@ public class StartAuto extends HSQService
                             {
                                 AppInstaller.installApk(HSQConfig.getContext(), filePath);
                                 delay(2000);
-                                findAndClickByTextDes("install", true, false, true, false, 30);
+                                while(true)
+                                {
+                                    int checkInstall = ASBLBridgeService.findMultiTextDesWindow(60, true, true, true, false, "install", "there was a problem parsing the package");
+                                    if (checkInstall == 2 || checkInstall == 0)
+                                    {
+                                        updateContent("Lỗi cài apk " + tryReinstall);
+                                        if(tryReinstall < 3) {
+                                            delay(5000);
+                                            tryReinstall++;
+                                            continue;
+                                        }
+                                        delay(180000);
+                                        continue beginInstall;
+                                    }
+                                    else {
+                                        break;
+                                    }
+                                }
                                 delay(3000);
-                                findAndClickByTextDes("decline", true, false, true, false, 180);
+                                ASBLBridgeService.findMultiTextDesWindow(180, true, true, true, false, "decline");
                                 delay(3600000);
                                 return true;
                             }
@@ -2807,7 +2878,7 @@ public class StartAuto extends HSQService
                     }
                     else
                     {
-                        updateNotificationContent("không thể download");
+                        updateContent("không thể download");
                         HSQTools.delay(10000);
                         return false;
                     }
@@ -2820,6 +2891,8 @@ public class StartAuto extends HSQService
 
     private boolean updatePromt()
     {
+        show();
+        delay(2000);
         // 1. Lấy version prompt hiện tại đang lưu trong máy (mặc định chưa có là 0)
         android.content.SharedPreferences prefs = com.quayquay.hsq.tools.HSQConfig.getContext()
                 .getSharedPreferences("QQ_PREFS_DATA", android.content.Context.MODE_PRIVATE);
@@ -2828,7 +2901,7 @@ public class StartAuto extends HSQService
         // 2. Nếu máy đang chạy bản cũ hơn bản trên server -> Tiến hành lôi về
         if (localPromtVersion < remotePromtVersion)
         {
-            updateNotificationContent("down promt v" + remotePromtVersion);
+            updateContent("down promt v" + remotePromtVersion);
 
             // Đảm bảo thư mục lưu trữ luôn tồn tại
             HSQFileHelper.createFolder("/sdcard/Servey");
@@ -2854,13 +2927,15 @@ public class StartAuto extends HSQService
                     { // Đảm bảo file tải về chứa chữ thật (>500 bytes)
                         // Tải thành công -> Khóa cứng mốc version mới vào SharedPreferences
                         prefs.edit().putInt("PROMT_VERSION", remotePromtVersion).apply();
-                        updateNotificationContent("Đã update Promt v" + remotePromtVersion);
+                        updateContent("Đã update Promt v" + remotePromtVersion);
                         delay(2000);
+                        hide();
                         return true;
                     }
                 }
                 else
                 {
+                    updateContent("down promt dp v" + remotePromtVersion);
                     // LINK DỰ PHÒNG CHÍNH THỨC NGOÀI INTERNET
                     String linkDownLoadDP = "http://quaykute.id.vn/apk/PromtGem.txt";
                     if (HSQHttps.downloadFile(linkDownLoadDP, fileDeLuu, false))
@@ -2868,14 +2943,15 @@ public class StartAuto extends HSQService
                         if (fileDeLuu.exists() && fileDeLuu.length() > 500)
                         {
                             prefs.edit().putInt("PROMT_VERSION", remotePromtVersion).apply();
-                            updateNotificationContent("Đã update Promt v" + remotePromtVersion);
+                            updateContent("Đã update Promt v" + remotePromtVersion);
                             delay(2000);
+                            hide();
                             return true;
                         }
                     }
                     else
                     {
-                        updateNotificationContent("Lỗi tải Promt từ xa!");
+                        updateContent("Lỗi tải Promt từ xa!");
                         HSQTools.delay(10000);
                         return false;
                     }

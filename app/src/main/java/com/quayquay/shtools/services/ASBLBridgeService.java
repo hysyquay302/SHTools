@@ -1090,7 +1090,59 @@ public class ASBLBridgeService extends Service {
         } catch (Exception e) {}
         return false;
     }
+    public static void dumpTree(AccessibilityNodeInfo node, int depth) {
+        if (node == null) return;
+        StringBuilder indent = new StringBuilder();
+        for (int i = 0; i < depth; i++) indent.append("  "); // Thụt lề cho dễ nhìn
 
+        // In ra Logcat
+        android.util.Log.d("ASBL_TREE", indent.toString() + "Class: " + node.getClassName() + " | Text: " + node.getText());
+
+        // Đệ quy moi ruột từng đứa con
+        for (int i = 0; i < node.getChildCount(); i++) {
+            dumpTree(node.getChild(i), depth + 1);
+        }
+    }
+    public static int findMultiTextDesWindow(int time, boolean isEqual, boolean isToLower, boolean click, boolean longPress, String... textOrDes) {
+        for (int i = 0; i < time; i++) {
+            // Lấy tất cả các lớp cửa sổ đang xếp chồng trên màn hình
+            List<AccessibilityWindowInfo> windows = asblService.getWindows();
+            if (windows != null) {
+                for (AccessibilityWindowInfo window : windows) {
+                    AccessibilityNodeInfo root = window.getRoot();
+                    if (root != null) {
+                        dumpTree(root, 0);
+                        List<AccessibilityNodeInfo> nodes;
+                        for (int j = 0; j < textOrDes.length; j++) {
+                            // Đệ quy tìm text trên từng cửa sổ
+                            nodes = findAccessibilityNodeInfosByTextDes(root, textOrDes[j], isEqual, isToLower);
+                            if (nodes != null && !nodes.isEmpty()) {
+                                if (click) {
+                                    Rect bounds = new Rect();
+                                    for (int k = 0; k < nodes.size(); k++) {
+                                        try {
+                                            nodes.get(k).getBoundsInScreen(bounds);
+                                            int centerX = (bounds.left + bounds.right) / 2;
+                                            int centerY = (bounds.top + bounds.bottom) / 2;
+                                            if (centerX >= 0 && centerY >= 0) {
+                                                do_click(centerX, centerY, longPress);
+                                                break;
+                                            }
+                                        } catch (Exception e) {}
+                                    }
+                                }
+                                try { root.recycle(); } catch (Exception e) {}
+                                return j + 1; // Sếp trả về j+1 giống code cũ
+                            }
+                        }
+                        try { root.recycle(); } catch (Exception e) {}
+                    }
+                }
+            }
+            delay(1000);
+        }
+        return 0;
+    }
     public static List<AccessibilityNodeInfo> findHintText (AccessibilityNodeInfo root, String hintText,boolean match){
         if (root == null) {
             return null;

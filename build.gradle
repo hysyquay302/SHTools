@@ -9,8 +9,8 @@ buildscript {
     }
 }
 ext {
-    myVersionCode = 101
-    myVersionName = " 1.0.1"
+    myVersionCode = 102
+    myVersionName = " 1.0.2"
 }
 task clean(type: Delete) {
     delete rootProject.buildDir
