@@ -1,11 +1,14 @@
 package com.quayquay.shtools;
-
+import com.google.gson.annotations.SerializedName;
 public class RegistrationInfo {
-
-    // 1. Tự định nghĩa Enum Gender ngay trong class (Viết hoa theo chuẩn Java)
     public enum Gender {
+        @SerializedName("None")
         NONE,
+
+        @SerializedName("Female")
         FEMALE,
+
+        @SerializedName("Male")
         MALE
     }
 
@@ -16,12 +19,13 @@ public class RegistrationInfo {
     private int MonthOfBirth;
     private int YearOfBirth;
     private int Age;
-
-    private Gender gender; // Sử dụng Enum tự định nghĩa ở trên
+    @SerializedName("Gender")
+    private Gender gender;
 
     private int ChildrenCount;
     private String ChildrenFirstname1;
     private String ChildrenLastname1;
+    @SerializedName("childrenGender1")
     private Gender childrenGender1;
     private int ChildrenDayOfBirth1;
     private int ChildrenMonthOfBirth1;
@@ -30,6 +34,7 @@ public class RegistrationInfo {
 
     private String ChildrenFirstname2;
     private String ChildrenLastname2;
+    @SerializedName("childrenGender2")
     private Gender childrenGender2;
     private int ChildrenDayOfBirth2;
     private int ChildrenMonthOfBirth2;

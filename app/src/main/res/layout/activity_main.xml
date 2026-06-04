@@ -25,12 +25,23 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent">
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/edtApiKey"
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/apiKeyLayout"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
             android:layout_width="match_parent"
-            android:layout_height="125dp"
-            android:gravity="top|left"
-            android:hint="API Server" />
+            android:layout_height="wrap_content"
+            android:hint="Chọn API Key">
+
+            <AutoCompleteTextView
+                android:id="@+id/apiKeyAutoComplete"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:importantForAccessibility="no"
+                android:inputType="none"
+                android:textAlignment="center"
+                tools:ignore="LabelFor"
+                tools:text="Select API Key To Run" />
+        </com.google.android.material.textfield.TextInputLayout>
 
         <Button
             android:id="@+id/btn_save"

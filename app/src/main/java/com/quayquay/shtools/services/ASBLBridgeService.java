@@ -69,6 +69,12 @@ public class ASBLBridgeService extends Service {
     public static int widthOfScreen = 0;
     public static int heightOfScreen = 0;
     public static int dpi = 0;
+    public static int xLeft = 0;
+    public static int xRight = 0;
+    public  static int xCenter = 0;
+    public  static int yTop = 0;
+    public  static int yBot = 0;
+    public  static int yCenter = 0;
     private static Rect tempRect = new Rect();
     private final Timer mCheckHangTimer = new Timer();
     private LifecycleOwner viewLifecycleOwner;
@@ -96,6 +102,12 @@ public class ASBLBridgeService extends Service {
         wmgr.getDefaultDisplay().getRealMetrics(metrics);
         widthOfScreen = metrics.widthPixels;
         heightOfScreen = metrics.heightPixels;
+        xLeft = widthOfScreen * 10 / 100;
+        xRight = widthOfScreen * 80 / 100;
+        xCenter = widthOfScreen * 50 / 100;
+        yTop = heightOfScreen * 30 / 100;
+        yBot = heightOfScreen * 80 / 100;
+        yCenter = heightOfScreen * 50 / 100;
         dpi = metrics.densityDpi;
         mCheckHangTimer.schedule(new TimerTask() {
             @Override
@@ -935,19 +947,16 @@ public class ASBLBridgeService extends Service {
             globalrecents();
             delay(3000);
             if (!findAndClickByTextDes("no recent items", true, true, true, false, 2)) {
-                int x1 = (10 * widthOfScreen) / 100;
-                int y = (50 * heightOfScreen) / 100;
-                int x2 = (90 * widthOfScreen) / 100;
-                swipe(x1, y, x2, y, 500);
+                swipe(xLeft, yCenter, xRight, yCenter, 800);
                 delay(1000);
-                swipe(x1, y, x2, y, 500);
+                swipe(xLeft, yCenter, xRight, yCenter, 800);
                 delay(1000);
-                swipe(x1, y, x2, y, 500);
+                swipe(xLeft, yCenter, xRight, yCenter, 800);
                 delay(1000);
                 int j = 0;
                 while (true) {
                     if (!findAndClickByTextDes("clear all", true, true, true, false, 2)) {
-                        swipe(x1, y, x2, y, 500);
+                        swipe(xLeft, yCenter, xRight, yCenter, 800);
                         if (j > 10) {
                             break;
                         }

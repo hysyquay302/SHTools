@@ -20,6 +20,7 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
+import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.Toast;
 
@@ -28,13 +29,25 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
-import com.google.android.material.textfield.TextInputEditText;
 import com.quayquay.shtools.extention.ActivityVisibilityObserver;
 import com.quayquay.shtools.services.ApiAccessibilityService;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
-
-    TextInputEditText edtApiKey;
+    private AutoCompleteTextView apiKeyAutoComplete;
+    private java.util.List<ApiKeyItem> apiKeyList;
+    private String selectedApiKey = "";
+    public static class ApiKeyItem {
+        private String alias;
+        private String apiKey;
+        public ApiKeyItem(String alias, String apiKey) {
+            this.alias = alias;
+            this.apiKey = apiKey;
+        }
+        public String getAlias() { return alias; }
+        public String getApiKey() { return apiKey; }
+        @Override
+        public String toString() { return alias; }
+    }
     SharedPreferences sharedPreferences;
     Button btnSave;
     Button btnClear;
@@ -88,12 +101,24 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         Button btnRemoveAdmin = findViewById(R.id.btn_remove_admin);
         btnRemoveAdmin.setOnClickListener(v -> showConfirmationDialog());
 
-        edtApiKey = findViewById(R.id.edtApiKey);
         btnSave = findViewById(R.id.btn_save);
         btnClear = findViewById(R.id.btn_clear);
 
-        String savedData = sharedPreferences.getString("DATA", "");
-        edtApiKey.setText(savedData);
+        // --- Bắt đầu Setup Dropdown ---
+        apiKeyAutoComplete = findViewById(R.id.apiKeyAutoComplete);
+        apiKeyList = loadApiKeysFromFile();
+        migrateOldApiKey(); // Chuyển DATA cũ sang SAVED_API_KEY
+
+        android.widget.ArrayAdapter<ApiKeyItem> adapter = new android.widget.ArrayAdapter<>(
+                this, android.R.layout.simple_dropdown_item_1line, apiKeyList);
+        apiKeyAutoComplete.setAdapter(adapter);
+
+        apiKeyAutoComplete.setOnItemClickListener((parent, view, position, id) -> {
+            ApiKeyItem selectedItem = (ApiKeyItem) parent.getItemAtPosition(position);
+            selectedApiKey = selectedItem.getApiKey();
+        });
+
+        loadSavedSelection();
 
         btnSave.setOnClickListener(this);
         btnClear.setOnClickListener(this);
@@ -539,7 +564,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     // =========================================================
     private void startAutoServiceWithMediaProjection() {
         // Fix: Method invocation 'toString' may produce 'NullPointerException'
-        apiKeyServer = String.valueOf(edtApiKey.getText());
+        apiKeyServer = selectedApiKey;
         if (!TextUtils.isEmpty(apiKeyServer)) {
             // 1. Cài đặt thông số giao diện cho Notification của HSQService
             com.quayquay.hsq.config.HSQUiParams uiParams = new com.quayquay.hsq.config.HSQUiParams(
@@ -619,13 +644,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     public void onClick(View view) {
         if (view == btnSave) {
-            String data = String.valueOf(edtApiKey.getText());
-            editor.putString("DATA", data);
-            editor.commit();
-            Toast.makeText(this, "Đã lưu API Key thành công!", Toast.LENGTH_SHORT).show();
+            if (!selectedApiKey.isEmpty()) {
+                editor.putString("SAVED_API_KEY", selectedApiKey);
+                editor.commit(); // Dùng commit() theo code cũ của sếp
+                Toast.makeText(this, "Đã lưu API Key thành công!", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "Vui lòng chọn một tài khoản từ danh sách", Toast.LENGTH_SHORT).show();
+            }
         } else if (view == btnClear) {
-            edtApiKey.setText("");
-            editor.clear();
+            apiKeyAutoComplete.setText("", false);
+            selectedApiKey = "";
+            editor.remove("SAVED_API_KEY");
             editor.commit();
         }
     }
@@ -634,5 +663,57 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onDestroy();
         // Thoát app là hủy luôn bộ đếm
         handler.removeCallbacks(onClickRegisterRunnable);
+    }
+    // ==========================================
+    // CÁC HÀM XỬ LÝ DROPDOWN VÀ JSON
+    // ==========================================
+    private java.util.List<ApiKeyItem> loadApiKeysFromFile() {
+        java.util.List<ApiKeyItem> items = new java.util.ArrayList<>();
+        try {
+            java.io.InputStream inputStream = getResources().openRawResource(R.raw.api_keys);
+            String jsonString = new java.util.Scanner(inputStream).useDelimiter("\\A").next();
+            org.json.JSONArray jsonArray = new org.json.JSONArray(jsonString);
+            for (int i = 0; i < jsonArray.length(); i++) {
+                org.json.JSONObject jsonObject = jsonArray.getJSONObject(i);
+                String alias = jsonObject.getString("alias");
+                String apiKey = jsonObject.getString("apiKey");
+
+                if (apiKey.equals("KEY_SERVEY")) {
+                    apiKey = BuildConfig.API_SERVEY;
+                }
+
+                items.add(new ApiKeyItem(alias, apiKey));
+            }
+        } catch (Exception e) {
+            Log.e("MainActivity", "Lỗi đọc file api_keys.json", e);
+        }
+        return items;
+    }
+
+    private void migrateOldApiKey() {
+        String oldApiKey = sharedPreferences.getString("DATA", null);
+        if (oldApiKey != null && !sharedPreferences.contains("SAVED_API_KEY")) {
+            for (ApiKeyItem item : apiKeyList) {
+                if (item.getApiKey().equals(oldApiKey)) {
+                    editor.putString("SAVED_API_KEY", item.getApiKey());
+                    editor.remove("DATA");
+                    editor.apply();
+                    return;
+                }
+            }
+        }
+    }
+
+    private void loadSavedSelection() {
+        String savedKey = sharedPreferences.getString("SAVED_API_KEY", null);
+        if (savedKey != null) {
+            for (ApiKeyItem item : apiKeyList) {
+                if (item.getApiKey().equals(savedKey)) {
+                    selectedApiKey = item.getApiKey();
+                    apiKeyAutoComplete.setText(item.getAlias(), false);
+                    break;
+                }
+            }
+        }
     }
 }

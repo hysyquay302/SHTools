@@ -27,6 +27,7 @@ android {
         resValue "string", "app_version_text", "\"Version ${myVersionName}\""
         buildConfigField "String", "API_KEY_GEMINI_KEY", "\"${properties.getProperty('API_KEY_GEMINI_KEY')}\""
         buildConfigField "String", "API_SERVEY", "\"${properties.getProperty('API_SERVEY')}\""
+        buildConfigField "String", "API_ADMIN_SERVER", "\"${properties.getProperty('API_ADMIN_SERVER')}\""
     }
 
     buildTypes {
@@ -71,6 +72,6 @@ dependencies {
     implementation 'com.ibm.icu:icu4j:78.3'
 
     // Thư viện riêng của bạn
-    implementation 'com.github.hysyquay302:hsq:1.7.0'
+    implementation 'com.github.hysyquay302:hsq:1.9.1'
 
 }
