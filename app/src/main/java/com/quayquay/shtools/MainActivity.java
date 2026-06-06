@@ -613,9 +613,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private void showDeviceOwnerRequestDialog() {
         hasShownPermissionDialog = true;
-        String adbCommand = "adb shell dpm set-device-owner " + getPackageName() + "/.MyDeviceAdminReceiver" +
-                " && adb shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS" +
-                " && adb shell appops set " + getPackageName() + " SYSTEM_ALERT_WINDOW allow";
+        String adbCommand = "adb -s {deviceID} shell dpm set-device-owner " + getPackageName() + "/.MyDeviceAdminReceiver" +
+                " && adb -s {deviceID} shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS" +
+                " && adb -s {deviceID} shell appops set " + getPackageName() + " SYSTEM_ALERT_WINDOW allow";
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Yêu cầu Quyền Quản Trị Tối Cao (Device Owner)")
