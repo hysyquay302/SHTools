@@ -32,6 +32,8 @@ import androidx.core.content.ContextCompat;
 import com.quayquay.shtools.extention.ActivityVisibilityObserver;
 import com.quayquay.shtools.services.ApiAccessibilityService;
 
+import java.io.File;
+
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     private AutoCompleteTextView apiKeyAutoComplete;
     private java.util.List<ApiKeyItem> apiKeyList;
@@ -101,6 +103,29 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         Button btnRemoveAdmin = findViewById(R.id.btn_remove_admin);
         btnRemoveAdmin.setOnClickListener(v -> showConfirmationDialog());
 
+        Button btnDeleteChat = findViewById(R.id.btn_delete_chat);
+        btnDeleteChat.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // 🌟 SỬA LỖI ĐỎ: Gọi đích danh MainActivity.this
+                File historyFolder = new File(MainActivity.this.getFilesDir(), "Survey");
+                File historyFile = new File(historyFolder, "chat_history_zone.json");
+
+                if (historyFile.exists()) {
+                    boolean isDeleted = historyFile.delete();
+                    if (isDeleted) {
+                        // Xóa thành công thì báo thành công
+                        Toast.makeText(MainActivity.this, "Đã xóa sạch trí nhớ của AI!", Toast.LENGTH_SHORT).show();
+                    } else {
+                        // Xóa xịt thì báo lỗi
+                        Toast.makeText(MainActivity.this, "Lỗi: Đéo thể xóa được file lịch sử!", Toast.LENGTH_SHORT).show();
+                    }
+                } else {
+                    // File không tồn tại tức là chat đang trống
+                    Toast.makeText(MainActivity.this, "Lịch sử chat đang trống sẵn rồi sếp!", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
         btnSave = findViewById(R.id.btn_save);
         btnClear = findViewById(R.id.btn_clear);
 
