@@ -2,5 +2,9 @@
   {
     "alias": "Servey",
     "apiKey": "KEY_SERVEY"
+  },
+  {
+    "alias": "Servey_Test",
+    "apiKey": "KEY_SERVEY_TEST"
   }
 ]

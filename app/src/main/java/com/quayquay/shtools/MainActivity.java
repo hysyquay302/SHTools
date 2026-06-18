@@ -53,6 +53,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     SharedPreferences sharedPreferences;
     Button btnSave;
     Button btnClear;
+    Button btnResetPromt;
     SharedPreferences.Editor editor;
 
     // --- Các biến cờ trạng thái quyền ---
@@ -128,6 +129,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         });
         btnSave = findViewById(R.id.btn_save);
         btnClear = findViewById(R.id.btn_clear);
+        btnResetPromt = findViewById(R.id.btn_reset_promt);
 
         // --- Bắt đầu Setup Dropdown ---
         apiKeyAutoComplete = findViewById(R.id.apiKeyAutoComplete);
@@ -147,6 +149,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         btnSave.setOnClickListener(this);
         btnClear.setOnClickListener(this);
+        btnResetPromt.setOnClickListener(v -> showResetPromtDialog());
 
         hasShownPermissionDialog = false;
 
@@ -165,6 +168,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                         isMediaProjectionGranted = true;
                         hasShownPermissionDialog = false;
+
                         checkNextPermission();
                     } else if (!hasShownPermissionDialog) {
                         showMediaProjectionDialog();
@@ -263,6 +267,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         observer = new ActivityVisibilityObserver();
         getLifecycle().addObserver(observer);
+        // --- THÊM ĐOẠN NÀY ĐỂ MỞ SOCKET TỰ ĐỘNG ---
+        android.content.SharedPreferences prefs = getSharedPreferences("QQ_PREFS", android.content.Context.MODE_PRIVATE);
+        String savedDeviceId = prefs.getString("saved_device_id", null);
+        if (savedDeviceId != null) {
+            RemoteStreamManager.getInstance(this, savedDeviceId);
+        }
 
         // Bắt đầu chuỗi kiểm tra quyền
         checkDeviceOwner();
@@ -556,17 +566,25 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         return false;
     }
 
-    private final Runnable onClickRegisterRunnable = new Runnable() { // Fix: may be 'final'
+    private final Runnable onClickRegisterRunnable = new Runnable() {
         @Override
         public void run() {
             try {
+                // 🛡️ LỚP BỌC THÉP SỐ 2: TẮT BOM NẾU TOOL ĐANG CHẠY HOẶC ĐANG UPDATE
+                // Đảm bảo sếp đã khai báo 2 biến static này bên StartAuto.java nhé!
+                if (StartAuto.isToolRunning || StartAuto.isUpdating) {
+                    Log.d("MainActivity", "Hủy nổ bom 60s vì Tool đang chạy hoặc Update!");
+                    finishAffinity(); // Giết sạch sành sanh Activity này đi
+                    return;
+                }
+
                 if (!isOnClickRegisterCalled && observer.isActivityStarted()) {
                     startAutoServiceWithMediaProjection();
                 } else {
-                    delay(1000);
+                    handler.postDelayed(this, 2000);
                 }
             } catch (Exception e) {
-                delay(1000);
+                e.printStackTrace();
             }
         }
     };
@@ -610,13 +628,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             }
 
             // 4. Kích hoạt Service (Không cần check version O vì minSdk là 28)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent);
-            } else {
-                startService(serviceIntent);
-            }
+            startForegroundService(serviceIntent);
 
-            finish();
+            finishAffinity();
         } else {
             new AlertDialog.Builder(MainActivity.this)
                     .setTitle("Lỗi")
@@ -638,9 +652,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private void showDeviceOwnerRequestDialog() {
         hasShownPermissionDialog = true;
-        String adbCommand = "adb -s {deviceID} shell dpm set-device-owner " + getPackageName() + "/.MyDeviceAdminReceiver" +
-                " && adb -s {deviceID} shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS" +
-                " && adb -s {deviceID} shell appops set " + getPackageName() + " SYSTEM_ALERT_WINDOW allow";
+
+        // Lấy deviceID thật, nếu có thì thay vào lệnh, không thì giữ placeholder
+        String realDeviceId = null;
+        try {
+            realDeviceId = StartAuto.deviceID;
+        } catch (Exception ignored) { }
+
+        String devicePlaceholder = (realDeviceId != null && !realDeviceId.isEmpty() && !realDeviceId.equals("UNKNOWN"))
+                ? realDeviceId
+                : "{deviceID}";
+
+        String adbCommand = "adb -s " + devicePlaceholder + " shell dpm set-device-owner " + getPackageName() + "/.MyDeviceAdminReceiver" +
+                " && adb -s " + devicePlaceholder + " shell pm grant " + getPackageName() + " android.permission.WRITE_SECURE_SETTINGS" +
+                " && adb -s " + devicePlaceholder + " shell appops set " + getPackageName() + " SYSTEM_ALERT_WINDOW allow";
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Yêu cầu Quyền Quản Trị Tối Cao (Device Owner)")
@@ -706,6 +731,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 if (apiKey.equals("KEY_SERVEY")) {
                     apiKey = BuildConfig.API_SERVEY;
                 }
+                if (apiKey.equals("KEY_SERVEY_TEST")) {
+                    apiKey = BuildConfig.API_SERVEY_TEST;
+                }
 
                 items.add(new ApiKeyItem(alias, apiKey));
             }
@@ -739,6 +767,29 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     break;
                 }
             }
+        }
+    }
+    private void showResetPromtDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("Reset Promt?")
+                .setMessage("Tool sẽ xóa version prompt đang lưu và thử xóa file prompt cũ.\nLần updatePromt tiếp theo sẽ tải lại prompt mới. Tiếp tục không?")
+                .setPositiveButton("RESET", (dialog, which) -> resetPromtState())
+                .setNegativeButton("HỦY", null)
+                .show();
+    }
+
+    private void resetPromtState() {
+        boolean saved = sharedPreferences.edit().putInt("PROMT_VERSION", 0).commit();
+
+        File promtFile = new File("/sdcard/Servey/PromtGem.txt");
+        boolean deleted = !promtFile.exists() || promtFile.delete();
+
+        if (saved && deleted) {
+            Toast.makeText(this, "Đã reset Promt. Lần updatePromt tới sẽ tải lại file mới.", Toast.LENGTH_LONG).show();
+        } else if (saved) {
+            Toast.makeText(this, "Đã reset version Promt nhưng chưa xóa được file cũ.", Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this, "Lỗi: Không reset được version Promt.", Toast.LENGTH_LONG).show();
         }
     }
 }
