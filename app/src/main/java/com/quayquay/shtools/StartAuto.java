@@ -4888,10 +4888,19 @@ public class StartAuto extends HSQService
                                             if (r.centerY() > (heightOfScreen * 0.65) && r.centerY() < (heightOfScreen - 50))
                                             {
                                                 // 5. Luôn ưu tiên lưu thằng nằm thấp hơn dưới đáy
-                                                if (r.centerY() > maxBlankY)
+                                                // NẾU cùng độ cao (lệch <= 20px) thì ưu tiên thằng BÊN PHẢI (Next luôn nằm bên phải Back)
+                                                if (r.centerY() > maxBlankY + 20)
                                                 {
                                                     maxBlankY = r.centerY();
                                                     bestBlankBtn = r;
+                                                }
+                                                else if (Math.abs(r.centerY() - maxBlankY) <= 20)
+                                                {
+                                                    if (bestBlankBtn == null || r.centerX() > bestBlankBtn.centerX())
+                                                    {
+                                                        maxBlankY = r.centerY();
+                                                        bestBlankBtn = r;
+                                                    }
                                                 }
                                             }
                                         }
@@ -5061,9 +5070,14 @@ public class StartAuto extends HSQService
                                         // Buff 10.000 điểm cho mũi tên xịn để nó đánh bại mọi nút Next/Submit rác dưới đáy!
                                         int scoreY = r.centerY() + (isRealArrow ? 10000 : 0);
 
-                                        if (scoreY > maxCenterY) {
+                                        if (scoreY > maxCenterY + 20) {
                                             maxCenterY = scoreY;
                                             bestXmlBtnRect = r;
+                                        } else if (Math.abs(scoreY - maxCenterY) <= 20) {
+                                            if (bestXmlBtnRect == null || r.centerX() > bestXmlBtnRect.centerX()) {
+                                                maxCenterY = scoreY;
+                                                bestXmlBtnRect = r;
+                                            }
                                         }
                                     } else {
                                         // Bắt nút đáp án tùy chỉnh (FUJI)
