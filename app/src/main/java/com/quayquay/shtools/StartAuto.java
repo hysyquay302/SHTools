@@ -3459,6 +3459,7 @@ public class StartAuto extends HSQService
     private String getAnswerFromGemByApi(int imageCount, boolean splitAnswer, boolean captureScreen, String prompt)
     {
         int tryAgain = 0;
+        int apiErrorCount = 0;
         String textAnswer = "";
         if (prompt.length() < 2)
         {
@@ -3581,8 +3582,18 @@ public class StartAuto extends HSQService
                         delay(1500);
                         continue;
                     }
-                    updateNotificationContent("Lỗi API/Mạng: " + textAnswer + ". Đợi 15s...");
-                    HSQTools.delay(15000);
+                    apiErrorCount++;
+                    if (apiErrorCount >= 3) {
+                        updateNotificationContent("Lỗi API 502 quá lỳ! Reset não AI...");
+                        try { if (AIHelper != null) AIHelper.freeRam(); } catch (Exception ignored) {}
+                        AIHelper = createAIHelper();
+                        createNewChatGemByApi(customAgentRule, true);
+                        apiErrorCount = 0;
+                        delay(2000);
+                    } else {
+                        updateNotificationContent("Lỗi API/Mạng (" + apiErrorCount + "/3): " + textAnswer + ". Đợi 15s...");
+                        HSQTools.delay(15000);
+                    }
                     continue;
                 }
                 else if (!textAnswer.contains("|"))
@@ -3631,6 +3642,7 @@ public class StartAuto extends HSQService
     private String sendChatToGemByApi(String chatContent)
     {
         int tryAgain = 0;
+        int apiErrorCount = 0;
         updateNotificationContent("Gửi chat đến API: " + chatContent);
 
         while (true)
@@ -3677,8 +3689,18 @@ public class StartAuto extends HSQService
                         delay(1500);
                         continue;
                     }
-                    updateNotificationContent("Lỗi API/Mạng: " + textAnswer + ". Đợi 15s...");
-                    HSQTools.delay(15000);
+                    apiErrorCount++;
+                    if (apiErrorCount >= 3) {
+                        updateNotificationContent("Lỗi API 502 quá lỳ! Reset não AI...");
+                        try { if (AIHelper != null) AIHelper.freeRam(); } catch (Exception ignored) {}
+                        AIHelper = createAIHelper();
+                        createNewChatGemByApi(customAgentRule, true);
+                        apiErrorCount = 0;
+                        delay(2000);
+                    } else {
+                        updateNotificationContent("Lỗi API/Mạng (" + apiErrorCount + "/3): " + textAnswer + ". Đợi 15s...");
+                        HSQTools.delay(15000);
+                    }
                     continue;
                 }
                 else if (!textAnswer.contains("|"))
@@ -6727,26 +6749,25 @@ public class StartAuto extends HSQService
                     }
                 }
 
-                // 2. Gom TẤT CẢ EditText nằm dưới Mỏ Neo vào mảng
-                if (labelBottom != -1) {
-                    for (int i = 0; i < nodes.getLength(); i++) {
-                        org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
-                        if (node.getAttribute("class").contains("EditText") || node.getAttribute("class").contains("AutoCompleteTextView")) {
-                            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                // 2. Gom TẤT CẢ EditText nằm dưới Mỏ Neo vào mảng (Hoặc TẤT CẢ nếu không có Mỏ Neo)
+                for (int i = 0; i < nodes.getLength(); i++) {
+                    org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                    if (node.getAttribute("class").contains("EditText") || node.getAttribute("class").contains("AutoCompleteTextView")) {
+                        android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
 
-                            // Mở rộng bán kính quét lên 2000px để gom trọn ổ các hộp phía dưới
-                            if (r != null && r.top >= labelBottom - 50 && r.top <= labelBottom + 2000) {
-                                if (r.centerY() > 180 && r.centerY() < heightOfScreen - 50) {
+                        // Mở rộng bán kính quét lên 2000px để gom trọn ổ các hộp phía dưới
+                        // NẾU MỎ NEO MÙ (labelBottom == -1), TA GOM SẠCH SÀNH SANH CÁC Ô NHẬP LIỆU TRÊN MÀN HÌNH
+                        if (r != null && (labelBottom == -1 || (r.top >= labelBottom - 50 && r.top <= labelBottom + 2000))) {
+                            if (r.centerY() > 180 && r.centerY() < heightOfScreen - 50) {
 
-                                    // Chống đếm trùng (Bọn WebView thỉnh thoảng nhả 2 Node đè lên nhau cho 1 ô)
-                                    boolean isDuplicate = false;
-                                    for (android.graphics.Rect box : inputBoxes) {
-                                        if (Math.abs(box.centerY() - r.centerY()) < 30) {
-                                            isDuplicate = true; break;
-                                        }
+                                // Chống đếm trùng (Bọn WebView thỉnh thoảng nhả 2 Node đè lên nhau cho 1 ô)
+                                boolean isDuplicate = false;
+                                for (android.graphics.Rect box : inputBoxes) {
+                                    if (Math.abs(box.centerY() - r.centerY()) < 30) {
+                                        isDuplicate = true; break;
                                     }
-                                    if (!isDuplicate) inputBoxes.add(r);
                                 }
+                                if (!isDuplicate) inputBoxes.add(r);
                             }
                         }
                     }
