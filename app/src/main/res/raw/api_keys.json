@@ -4,6 +4,10 @@
     "apiKey": "KEY_SERVEY"
   },
   {
+    "alias": "Servey_2",
+    "apiKey": "KEY_SERVEY_2"
+  },
+  {
     "alias": "Servey_Test",
     "apiKey": "KEY_SERVEY_TEST"
   }

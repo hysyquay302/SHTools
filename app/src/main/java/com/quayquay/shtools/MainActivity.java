@@ -709,6 +709,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
     @Override
+    protected void onStop() {
+        super.onStop();
+        // Ngắt đếm ngược nếu người dùng ẩn app (bấm phím Home)
+        handler.removeCallbacks(onClickRegisterRunnable);
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         // Thoát app là hủy luôn bộ đếm
@@ -731,7 +738,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 if (apiKey.equals("KEY_SERVEY")) {
                     apiKey = BuildConfig.API_SERVEY;
                 }
-                if (apiKey.equals("KEY_SERVEY_TEST")) {
+                else if (apiKey.equals("KEY_SERVEY_2")) {
+                    apiKey = BuildConfig.API_SERVEY_2;
+                }
+                else if (apiKey.equals("KEY_SERVEY_TEST")) {
                     apiKey = BuildConfig.API_SERVEY_TEST;
                 }
 

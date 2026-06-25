@@ -10,6 +10,7 @@ import android.media.Image;
 import android.media.ImageReader;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
+import android.content.Intent;
 import android.os.Handler;
 import android.util.Base64;
 
@@ -114,6 +115,14 @@ public class RemoteStreamManager {
                             if (data.getString("device_id").equals(deviceId)) {
                                 dispatchSwipe((float) data.getDouble("x1"), (float) data.getDouble("y1"),
                                         (float) data.getDouble("x2"), (float) data.getDouble("y2"));
+                            }
+                        } catch (Exception e) { e.printStackTrace(); }
+                    })
+                    .on("apk_receive_text", args -> {
+                        try {
+                            JSONObject data = (JSONObject) args[0];
+                            if (data.getString("device_id").equals(deviceId)) {
+                                handleTextInput(data.optString("text", ""), data.optBoolean("clear", false));
                             }
                         } catch (Exception e) { e.printStackTrace(); }
                     });
@@ -233,6 +242,31 @@ public class RemoteStreamManager {
             else if ("RECENTS".equals(action)) asbl.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS);
         }
     }
+
+    private void handleTextInput(String text, boolean clear) {
+        try {
+            if (clear) {
+                Intent intent = new Intent("ADB_CLEAR_TEXT");
+                intent.setPackage("com.android.adbkeyboard");
+                context.sendBroadcast(intent);
+                android.util.Log.d(TAG, "=> NHAN LENH XOA TEXT TU WEB");
+                return;
+            }
+
+            if (text == null || text.isEmpty()) return;
+
+            String safeText = text.length() > 4000 ? text.substring(0, 4000) : text;
+            Intent intent = new Intent("ADB_INPUT_B64");
+            intent.setPackage("com.android.adbkeyboard");
+            String b64 = Base64.encodeToString(safeText.getBytes("UTF-8"), Base64.NO_WRAP);
+            intent.putExtra("msg", b64);
+            context.sendBroadcast(intent);
+            android.util.Log.d(TAG, "=> NHAN LENH NHAP TEXT TU WEB: " + safeText.length() + " ky tu");
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Loi nhap text qua ADB Keyboard: " + e.getMessage(), e);
+        }
+    }
+
     public void retryStream() {
         if (streamRequested) {
             startStream();

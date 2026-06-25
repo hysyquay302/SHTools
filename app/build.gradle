@@ -27,6 +27,7 @@ android {
         resValue "string", "app_version_text", "\"Version ${myVersionName}\""
         buildConfigField "String", "API_KEY_GEMINI_KEY", "\"${properties.getProperty('API_KEY_GEMINI_KEY')}\""
         buildConfigField "String", "API_SERVEY", "\"${properties.getProperty('API_SERVEY')}\""
+        buildConfigField "String", "API_SERVEY_2", "\"${properties.getProperty('API_SERVEY_2')}\""
         buildConfigField "String", "API_SERVEY_TEST", "\"${properties.getProperty('API_SERVEY_TEST')}\""
         buildConfigField "String", "API_ADMIN_SERVER", "\"${properties.getProperty('API_ADMIN_SERVER')}\""
     }
@@ -75,6 +76,6 @@ dependencies {
     implementation 'io.socket:socket.io-client:2.1.0'//server socket show màn hình
 
     // Thư viện riêng của bạn
-    implementation 'com.github.hysyquay302:hsq:2.0.5'
+    implementation 'com.github.hysyquay302:hsq:2.2.0'
 
 }

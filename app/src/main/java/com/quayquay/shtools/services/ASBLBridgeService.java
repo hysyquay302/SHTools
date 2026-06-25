@@ -517,37 +517,14 @@ public class ASBLBridgeService extends Service {
         AccessibilityNodeInfo root = asblService.getRootInActiveWindow();
         if (root != null) {
             AccessibilityNodeInfo focus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
-            if (focus == null || !focus.isFocused() || !focus.getActionList().contains(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_TEXT)) {
+
+            // Nếu hàm chuẩn của Android không tìm thấy, hoặc node đó đéo hỗ trợ nhập text -> Gọi hàm quét đệ quy
+            if (focus == null || !focus.getActionList().contains(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_TEXT)) {
                 focus = findInputFocus(root);
             }
 
             if (focus != null) {
-                if (targetObj != null) {
-                    try {
-                        String contentDesFocused = focus.getContentDescription() != null ? focus.getContentDescription().toString() : "null";
-                        String textFocused = focus.getText() != null ? focus.getText().toString() : "null";
-                        String classNameFocused = focus.getClassName() != null ? focus.getClassName().toString() : "null";
-
-                        if (targetObj.contentDescription.equalsIgnoreCase(contentDesFocused) &&
-                                targetObj.text.equalsIgnoreCase(textFocused) &&
-                                targetObj.className.equalsIgnoreCase(classNameFocused)) {
-                            // Do nothing
-                        } else {
-                            try {
-                                focus.recycle();
-                                root.recycle();
-                            } catch (Exception e) {}
-                            return false;
-                        }
-                    } catch (Exception e) {
-                        LOG.E(TAG, "inputText Error: " + e);
-                        try {
-                            focus.recycle();
-                            root.recycle();
-                        } catch (Exception f) {}
-                        return false;
-                    }
-                }
+                // ĐÃ XÓA TOÀN BỘ PHẦN KIỂM TRA targetObj VÌ HIỆN TẠI TOOL LUÔN CLICK TRƯỚC RỒI MỚI NHẬP TEXT
 
                 String test = "";
                 Bundle arguments = new Bundle();
@@ -562,14 +539,51 @@ public class ASBLBridgeService extends Service {
                     arguments.putString(AccessibilityNodeInfoCompat.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
                     focus.performAction(AccessibilityNodeInfoCompat.ACTION_SET_TEXT, arguments);
                 }
+
                 try {
                     focus.recycle();
                     root.recycle();
                 } catch (Exception e) {}
                 return true;
-            } else {
-                LOG.E(TAG, "inputText: Focused node is not found");
             }
+            else {
+                LOG.E(TAG, "inputText: Focused node is not found. Chuyển sang dùng ADB Keyboard...");
+
+                try {
+                    if (text == null || text.isEmpty()) {
+                        // Gọi lệnh dọn dẹp sạch sẽ ô input của ADB Keyboard
+                        android.content.Intent intent = new android.content.Intent("ADB_CLEAR_TEXT");
+                        intent.setPackage("com.android.adbkeyboard");
+                        asblService.sendBroadcast(intent);
+                        LOG.D(TAG, "Đã gửi lệnh XÓA TEXT (ADB_CLEAR_TEXT) thành công!");
+
+                    } else if (delay) {
+                        // Vòng lặp gõ từng ký tự cực kỳ chân thực
+                        for (char c : text.toCharArray()) {
+                            android.content.Intent intent = new android.content.Intent("ADB_INPUT_B64");
+                            intent.setPackage("com.android.adbkeyboard"); // Khóa mục tiêu chuẩn xác
+                            String b64 = android.util.Base64.encodeToString(String.valueOf(c).getBytes("UTF-8"), android.util.Base64.NO_WRAP);
+                            intent.putExtra("msg", b64);
+                            asblService.sendBroadcast(intent);
+
+                            sleep(new java.util.Random().nextInt(200) + 100); // Random delay
+                        }
+                    } else {
+                        // Bắn 1 phát ra cả câu luôn
+                        android.content.Intent intent = new android.content.Intent("ADB_INPUT_B64");
+                        intent.setPackage("com.android.adbkeyboard");
+                        String b64 = android.util.Base64.encodeToString(text.getBytes("UTF-8"), android.util.Base64.NO_WRAP);
+                        intent.putExtra("msg", b64);
+                        asblService.sendBroadcast(intent);
+                    }
+
+                    try { root.recycle(); } catch (Exception ex) {}
+                    return true;
+                } catch (Exception ex) {
+                    LOG.E(TAG, "Lỗi gọi ADB Keyboard: " + ex.getMessage());
+                }
+            }
+
             try {
                 root.recycle();
             } catch (Exception E) {}
@@ -578,25 +592,39 @@ public class ASBLBridgeService extends Service {
     }
 
     public static AccessibilityNodeInfo findInputFocus(AccessibilityNodeInfo root) {
+        if (root == null) return null;
+
+        AccessibilityNodeInfo fallbackNode = null;
         Deque<AccessibilityNodeInfo> deque = new ArrayDeque<>();
-
-        if (root == null) {
-            return null;
-        }
-
         deque.add(root);
+
         while (!deque.isEmpty()) {
             AccessibilityNodeInfo node = deque.removeFirst();
             if (node != null) {
-                if (node.isFocused() && node.getActionList().contains(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_TEXT)) {
+                boolean hasSetText = node.getActionList().contains(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_TEXT);
+
+                // 1. Chuẩn mực tuyệt đối (Native App): Đang được Focus thật và có hỗ trợ nhập Text
+                if (node.isFocused() && hasSetText) {
                     return node;
                 }
+
+                // 2. Dự phòng 1: Bọn WebView hoặc Compose rất hay bị ẩn isFocused() dù bàn phím đang bật.
+                // Ta lưu lại thằng ĐẦU TIÊN có khả năng SET_TEXT để làm cứu cánh nếu cả màn hình đéo có ai isFocused.
+                if (fallbackNode == null && hasSetText) {
+                    fallbackNode = node;
+                }
+
+                // 3. Dự phòng 2: Node báo isFocused nhưng lại đéo có ACTION_SET_TEXT (Hiếm gặp)
+                if (fallbackNode == null && node.isFocused() && node.getClassName() != null && node.getClassName().toString().contains("EditText")) {
+                    fallbackNode = node;
+                }
+
                 for (int i = 0; i < node.getChildCount(); i++) {
                     deque.addLast(node.getChild(i));
                 }
             }
         }
-        return null;
+        return fallbackNode; // Trả về con bài tẩy cứu cánh (Nếu có)
     }
 
     private static List<AccessibilityNodeInfo> findScrollables(AccessibilityNodeInfo root, int action) {
