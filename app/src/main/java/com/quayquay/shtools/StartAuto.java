@@ -245,56 +245,15 @@ public class StartAuto extends HSQService
                             delay(2000);
                             continue;
                         }
-                        //region --- lấy điểm gửi điểm lên server (BẢN CHỐNG ẢO GIÁC OCR) ---
-
-// 🎯 TẦNG 0: BÓP HẸP TẦM NHÌN (Điểm số thường ở tít trên đỉnh màn hình, quét tới Y=800 là quá dư rồi)
-                        List<HSQTools.TextBlock> checkUserPoints = getCheckAnswerSmart().stream()
-                                .filter(x -> x.y > 50 && x.y < 800)
-                                .collect(Collectors.toList());
-
-                        for (HSQTools.TextBlock check : checkUserPoints)
+                        //region --- lấy điểm gửi điểm lên server (BẢN CHỐNG ẢO GIÁC OCR + CHỐNG ĐỌC QUÁ SỚM) ---
+                        int accountPoint = findBestBituroAccountPoint();
+                        if (accountPoint > 0)
                         {
-                            // Đưa hết về chữ thường và xóa khoảng trắng thừa ở 2 đầu
-                            String rawText = check.text.toLowerCase().trim();
-
-                            // Kiểm tra xem có đuôi là pts hoặc points không
-                            if (rawText.endsWith("pts") || rawText.endsWith("points"))
-                            {
-                                // Cắt bỏ cái đuôi đi, chỉ giữ lại phần lõi bên trong
-                                String prefix = rawText.replaceAll("(pts|points)$", "").trim();
-
-                                // 🎯 TẦNG 1: LƯỚI LỌC TỬ HÌNH (CHẶN ĐỨNG CHỮ 'g' -> '9')
-                                // Phần lõi BẮT BUỘC chỉ được chứa: Số (0-9), dấu phẩy, dấu chấm, khoảng trắng,
-                                // và các chữ hay bị lú (o, l, i).
-                                // Nếu lòi ra chữ 'n', 'd', 'a' (như trong từ Loadin9, Pendin9) -> CÚT NGAY!
-                                if (prefix.matches("^[0-9oli,.\\s]+$"))
-                                {
-                                    // 🎯 TẦNG 2: ĐỒNG HÓA KÝ TỰ BỊ LÚ
-                                    // OCR hay đọc chữ O thành 0, chữ l/i thành 1
-                                    String normalizedPrefix = prefix
-                                            .replace("o", "0")
-                                            .replace("l", "1")
-                                            .replace("i", "1");
-
-                                    // 🎯 TẦNG 3: VẮT KIỆT CHỈ LẤY SỐ THUẦN TÚY (Lọc luôn dấu phẩy)
-                                    String cleanNumStr = normalizedPrefix.replaceAll("[^0-9]", "");
-
-                                    if (!cleanNumStr.isEmpty())
-                                    {
-                                        try
-                                        {
-                                            int pointt = Integer.parseInt(cleanNumStr);
-                                            if (pointt > 0)
-                                            {
-                                                // Gửi điểm lên server với format chuẩn (Ví dụ: 1500 pts thay vì 1,500 pts)
-                                                updatePoint(pointt + " pts");
-                                                break;
-                                            }
-                                        }
-                                        catch (Exception ignored) {}
-                                    }
-                                }
-                            }
+                            updatePoint(accountPoint + " pts");
+                        }
+                        else
+                        {
+                            writeSerLogs("Không tìm được account point hợp lệ ở đầu Bituro");
                         }
 //endregion
                         HSQTools.getImageExistss(2, true, R.drawable.btr_serveysbl, R.drawable.btr_serveysbl_1);
@@ -3329,6 +3288,113 @@ public class StartAuto extends HSQService
         }
     }
 
+    private int findBestBituroAccountPoint()
+    {
+        Map<Integer, Integer> scoreByPoint = new HashMap<>();
+        Map<Integer, Integer> minYByPoint = new HashMap<>();
+        Map<Integer, String> sampleByPoint = new HashMap<>();
+        int topLimit = heightOfScreen > 0 ? Math.max(420, Math.min(800, heightOfScreen / 4)) : 800;
+
+        for (int scan = 0; scan < 5; scan++)
+        {
+            List<HSQTools.TextBlock> blocks = getCheckAnswerSmart();
+            if (blocks != null)
+            {
+                for (HSQTools.TextBlock block : blocks)
+                {
+                    if (block == null || block.text == null) continue;
+                    if (block.y <= 45 || block.y >= topLimit) continue;
+
+                    Integer point = parseBituroPointCandidate(block.text);
+                    if (point == null || point <= 0 || point > 10000000) continue;
+
+                    int score = 10;
+                    score += block.y < (topLimit * 0.55f) ? 8 : 3;
+                    if (point >= 10) score += 4;
+                    else score -= 6;
+                    if (point >= 100) score += 5;
+
+                    scoreByPoint.put(point, scoreByPoint.containsKey(point) ? scoreByPoint.get(point) + score : score);
+                    int oldMinY = minYByPoint.containsKey(point) ? minYByPoint.get(point) : Integer.MAX_VALUE;
+                    minYByPoint.put(point, Math.min(oldMinY, block.y));
+                    if (!sampleByPoint.containsKey(point))
+                    {
+                        sampleByPoint.put(point, block.text + " @" + block.x + "," + block.y);
+                    }
+                }
+            }
+            delay(650);
+        }
+
+        if (scoreByPoint.isEmpty()) return -1;
+
+        boolean hasPointAbove9 = false;
+        for (Integer point : scoreByPoint.keySet())
+        {
+            if (point != null && point >= 10)
+            {
+                hasPointAbove9 = true;
+                break;
+            }
+        }
+
+        int bestPoint = -1;
+        int bestScore = Integer.MIN_VALUE;
+        StringBuilder debug = new StringBuilder("Account point candidates: ");
+
+        for (Map.Entry<Integer, Integer> entry : scoreByPoint.entrySet())
+        {
+            int point = entry.getKey();
+            int score = entry.getValue();
+            if (hasPointAbove9 && point < 10) score -= 1000;
+            score += Math.min(point, 500000) / 100;
+            score -= minYByPoint.containsKey(point) ? (minYByPoint.get(point) / 100) : 0;
+
+            debug.append(point)
+                    .append(" pts(score=").append(score)
+                    .append(", sample=").append(sampleByPoint.get(point))
+                    .append("); ");
+
+            if (score > bestScore || (score == bestScore && point > bestPoint))
+            {
+                bestScore = score;
+                bestPoint = point;
+            }
+        }
+
+        Log.d("TEST_TREO", debug.toString());
+        writeSerLogs(debug + "=> chọn " + bestPoint + " pts");
+        return bestPoint;
+    }
+
+    private Integer parseBituroPointCandidate(String text)
+    {
+        if (text == null) return null;
+        String rawText = text.toLowerCase(Locale.US).trim();
+        Matcher matcher = Pattern.compile("(^|[^0-9a-z])([0-9oli][0-9oli,.\\s]{0,14})\\s*(pts|points)\\b", Pattern.CASE_INSENSITIVE).matcher(rawText);
+        Integer best = null;
+
+        while (matcher.find())
+        {
+            String prefix = matcher.group(2).trim();
+            if (!prefix.matches("^[0-9oli,.\\s]+$")) continue;
+
+            String cleanNumStr = prefix
+                    .replace("o", "0")
+                    .replace("l", "1")
+                    .replace("i", "1")
+                    .replaceAll("[^0-9]", "");
+
+            if (cleanNumStr.isEmpty()) continue;
+            try
+            {
+                int point = Integer.parseInt(cleanNumStr);
+                if (point > 0 && (best == null || point > best)) best = point;
+            }
+            catch (Exception ignored) {}
+        }
+        return best;
+    }
     private void updatePoint(String points)
     {
         while(true) {
