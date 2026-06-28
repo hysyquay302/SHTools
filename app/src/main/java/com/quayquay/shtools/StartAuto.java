@@ -8,6 +8,7 @@ import static com.quayquay.shtools.services.ASBLBridgeService.globalHome;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.util.Log;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -30,7 +31,6 @@ import com.quayquay.hsq.tools.HSQTools;
 import com.quayquay.hsq.tools.HSQTools.TextBlock;
 import com.quayquay.hsq.tools.HTMustcApiHelper;
 import com.quayquay.hsq.tools.IApiHelper;
-import com.quayquay.hsq.tools.IProfileProvider;
 import com.quayquay.hsq.tools.NexusMmoApiHelper;
 import com.quayquay.hsq.tools.ServerQueuedApiHelper;
 import com.quayquay.hsq.tools.TokenRouterApiHelper;
@@ -54,6 +54,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -71,11 +72,13 @@ public class StartAuto extends HSQService
     private static int yCenter = 0;
     private static int apkVersion = 0;
     private static int remotePromtVersion = 0;
-    private String apiRun = "", localServerIp = "", idTelegram = "", customAgentRule = "", aiModel = "", textAnswer = "", topText = "", AIWebSite = "", AIApiKey = "";
+    private String apiRun = "", localServerIp = "", idTelegram = "", customAgentRule = "", textAnswer = "", topText = "", AIWebSite, AIApiKey, aiModel,
+            AIWebSite1 = "", AIApiKey1 = "", aiModel1 = "", AIWebSite2 = "", AIApiKey2 = "", aiModel2 = "";
     private boolean AIProxyEnabled = false;
     private String AIProxyUrl = "https://quaykute.id.vn";
 
     private static final int VCode = BuildConfig.VERSION_CODE;
+    private static final int MAX_LOCAL_BLIND_IMAGES = 8;
     public static String deviceID = HSQTools.getDeviceSerial(HSQConfig.getContext());
     private static String shortDeviceID = getShortDeviceID();
     @SuppressLint("SdCardPath")
@@ -95,8 +98,10 @@ public class StartAuto extends HSQService
         // Nếu chuỗi ngắn hơn hoặc bằng 8 ký tự thì giữ nguyên
         return StartAuto.deviceID;
     }
-    private int AINguL = 0, createAgain = 0, currentState = 0, xs = 0, ysTop = 0, ysBot = 0, swipeDuration = 2000, tryNextAgain = 0;
+    private int AINguL = 0, createAgain = 0, currentState = 0, xs = 0, ysTop = 0, ysBot = 0, swipeDuration = 2000, tryNextAgain = 0, changedSite = 0;
+    private boolean isNextCard = false;
     private List<HSQTools.TextBlock> screenBegin = new ArrayList<>();
+    private List<HSQTools.TextBlock> phoneScreen = new ArrayList<>();
     private static final int STATE_START = 0, STATE_GET_ANSWER = 1, STATE_ANSWER_OK = 2, STATE_ROLLBACK1 = 3;
     public static boolean isStop = false;
     public static boolean isToolRunning = false;
@@ -135,7 +140,6 @@ public class StartAuto extends HSQService
             String directionPath = "/sdcard/Servey/direction.json";
             pathInfoProfileSaved = "/sdcard/Servey/sv_" + deviceID + ".json";
             RegistrationInfo InfoProfile = new RegistrationInfo();
-            IProfileProvider profileProvider = null;
             String profileData = "";
             Instant startTime = Instant.now();
 
@@ -165,7 +169,10 @@ public class StartAuto extends HSQService
                 {
                     while (true)
                     {
-                        updateProfile();
+                        if(!updateProfile()) {
+                            continue startTool;
+                        }
+
                         try
                         {
                             // 1. Đọc nội dung file JSON
@@ -176,98 +183,7 @@ public class StartAuto extends HSQService
                                 // 2. Gson tương đương MissingMemberHandling.Ignore của Newtonsoft
                                 Gson gson = new GsonBuilder().create();
                                 InfoProfile = gson.fromJson(profileData, RegistrationInfo.class);
-                                final RegistrationInfo finalInfoProfile = InfoProfile;
 
-                                int minIncome = 900;
-                                int maxIncome = 2000;
-                                final int annualHouseholdIncome = (new Random().nextInt((maxIncome - minIncome) + 1) + minIncome) * 1000000; // Đơn vị: VNĐ
-
-                                // Luật: Thu nhập hộ gia đình hàng tháng = Năm / 12
-                                final int monthlyHouseholdIncome = annualHouseholdIncome / 12;
-
-                                // Luật: Thu nhập cá nhân hàng tháng = 45% - 60% của Hộ gia đình [cite: 46]
-                                int randomPercent = new Random().nextInt(16) + 45; // 45 đến 60
-                                final int monthlyPersonalIncome = (monthlyHouseholdIncome * randomPercent) / 100;
-
-                                profileProvider = new IProfileProvider()
-                                {
-                                    @Override
-                                    public String getGenderStr()
-                                    {
-                                        if (finalInfoProfile.getGender() == RegistrationInfo.Gender.FEMALE)
-                                            return "Nữ";
-                                        if (finalInfoProfile.getGender() == RegistrationInfo.Gender.MALE)
-                                            return "Nam";
-                                        return "";
-                                    }
-
-                                    @Override
-                                    public int getAge()
-                                    {
-                                        return finalInfoProfile.getAge();
-                                    }
-
-                                    @Override
-                                    public int getYearOfBirth()
-                                    {
-                                        return finalInfoProfile.getYearOfBirth();
-                                    }
-
-                                    @Override
-                                    public String getProvince()
-                                    {
-                                        return finalInfoProfile.getProvince();
-                                    }
-
-                                    @Override
-                                    public String getZipCode()
-                                    {
-                                        return String.valueOf(finalInfoProfile.getZipCode());
-                                    }
-
-                                    @Override
-                                    public String getEducation()
-                                    {
-                                        return finalInfoProfile.getEducation();
-                                    }
-
-                                    @Override
-                                    public String getJobField()
-                                    {
-                                        return finalInfoProfile.getLinhVucNghe();
-                                    }
-
-                                    @Override
-                                    public String getJobTitle()
-                                    {
-                                        return finalInfoProfile.getChucDanh();
-                                    }
-
-                                    @Override
-                                    public int getChildrenCount()
-                                    {
-                                        return finalInfoProfile.getChildrenCount();
-                                    }
-
-                                    // Ép kiểu chuỗi số (Gửi số gốc để clicktotext dễ fuzzy match, hoặc API xử lý)
-                                    @Override
-                                    public String getAnnualHouseholdIncome()
-                                    {
-                                        return String.valueOf(annualHouseholdIncome);
-                                    }
-
-                                    @Override
-                                    public String getMonthlyHouseholdIncome()
-                                    {
-                                        return String.valueOf(monthlyHouseholdIncome);
-                                    }
-
-                                    @Override
-                                    public String getMonthlyPersonalIncome()
-                                    {
-                                        return String.valueOf(monthlyPersonalIncome);
-                                    }
-                                };
                                 break;
                             }
                             else
@@ -310,7 +226,7 @@ public class StartAuto extends HSQService
                     ysBot = yBot;
                     swipeDuration = 2000;
                     String tempTextAnswer = "";
-                    boolean daClick, screenDif, dropDownOpen;
+                    boolean daClick, screenDif;
                     String PACK_BITURO = "com.bituro.android.bituro";
                     boolean isAppOpen = HSQTools.isAppOpening(PACK_BITURO);
                     if (!isAppOpen)
@@ -351,7 +267,7 @@ public class StartAuto extends HSQService
                                 // Phần lõi BẮT BUỘC chỉ được chứa: Số (0-9), dấu phẩy, dấu chấm, khoảng trắng,
                                 // và các chữ hay bị lú (o, l, i).
                                 // Nếu lòi ra chữ 'n', 'd', 'a' (như trong từ Loadin9, Pendin9) -> CÚT NGAY!
-                                if (prefix.matches("^[0-9oli,\\.\\s]+$"))
+                                if (prefix.matches("^[0-9oli,.\\s]+$"))
                                 {
                                     // 🎯 TẦNG 2: ĐỒNG HÓA KÝ TỰ BỊ LÚ
                                     // OCR hay đọc chữ O thành 0, chữ l/i thành 1
@@ -621,57 +537,41 @@ public class StartAuto extends HSQService
                                     TextBlock minPointBlock = null;
                                     TextBlock minMinuteBlock = null;
                                     TextBlock minStarBlock = null;
-                                    int maxInRangeValue = -1;
-                                    int minOutRangeValue = Integer.MAX_VALUE;
 
-                                    for (int j = 0; j < AllPointsOK.size(); j++)
-                                    {
-                                        TextBlock block = AllPointsOK.get(j);
-                                        if (block.text.toLowerCase().contains("points") || block.text.toLowerCase().contains("pts"))
+                                    java.util.List<TextBlock> pointBlocks = new java.util.ArrayList<>();
+                                    for (TextBlock b : AllPointsOK) {
+                                        if (b.text.toLowerCase().contains("points") || b.text.toLowerCase().contains("pts")) {
+                                            pointBlocks.add(b);
+                                        }
+                                    }
+
+                                    pointBlocks.sort((b1, b2) -> {
+                                        int p1 = 0, p2 = 0;
+                                        try { p1 = Integer.parseInt(b1.text.replaceAll("[^\\d]", "")); } catch (Exception ignored) {}
+                                        try { p2 = Integer.parseInt(b2.text.replaceAll("[^\\d]", "")); } catch (Exception ignored) {}
+                                        
+                                        int r1 = (p1 >= 90 && p1 < 200) ? 1 : ((p1 >= 0 && p1 < 90) ? 2 : 3);
+                                        int r2 = (p2 >= 90 && p2 < 200) ? 1 : ((p2 >= 0 && p2 < 90) ? 2 : 3);
+                                        
+                                        if (r1 != r2) return Integer.compare(r1, r2);
+                                        return Integer.compare(p1, p2);
+                                    });
+
+                                    if (!pointBlocks.isEmpty()) {
+                                        minPointBlock = pointBlocks.get(0);
+                                        int j = AllPointsOK.indexOf(minPointBlock);
+                                        
+                                        for (int offset = 1; offset <= 2; offset++)
                                         {
-                                            try
+                                            if (j + offset < AllPointsOK.size())
                                             {
-                                                int currentPoints = Integer.parseInt(block.text.replaceAll("[^\\d]", ""));
-                                                TextBlock currentMinuteBlock = null;
-                                                TextBlock currentStarBlock = null;
-
-                                                for (int offset = 1; offset <= 2; offset++)
-                                                {
-                                                    if (j + offset < AllPointsOK.size())
-                                                    {
-                                                        String nextText = AllPointsOK.get(j + offset).text.toLowerCase();
-                                                        if (nextText.contains("points") || nextText.contains("pts"))
-                                                            break;
-                                                        if (nextText.contains("min"))
-                                                            currentMinuteBlock = AllPointsOK.get(j + offset);
-                                                        else if (nextText.contains("/5"))
-                                                            currentStarBlock = AllPointsOK.get(j + offset);
-                                                    }
-                                                }
-
-                                                if (currentPoints >= 0 && currentPoints <= 150)
-                                                {
-                                                    if (currentPoints > maxInRangeValue)
-                                                    {
-                                                        maxInRangeValue = currentPoints;
-                                                        minPointBlock = block;
-                                                        minMinuteBlock = currentMinuteBlock;
-                                                        minStarBlock = currentStarBlock;
-                                                    }
-                                                }
-                                                else if (currentPoints < minOutRangeValue)
-                                                {
-                                                    minOutRangeValue = currentPoints;
-                                                    if (minPointBlock == null)
-                                                    {
-                                                        minPointBlock = block;
-                                                        minMinuteBlock = currentMinuteBlock;
-                                                        minStarBlock = currentStarBlock;
-                                                    }
-                                                }
-                                            }
-                                            catch (Exception ignored)
-                                            {
+                                                String nextText = AllPointsOK.get(j + offset).text.toLowerCase();
+                                                if (nextText.contains("points") || nextText.contains("pts"))
+                                                    break;
+                                                if (nextText.contains("min"))
+                                                    minMinuteBlock = AllPointsOK.get(j + offset);
+                                                else if (nextText.contains("/5"))
+                                                    minStarBlock = AllPointsOK.get(j + offset);
                                             }
                                         }
                                     }
@@ -927,12 +827,10 @@ public class StartAuto extends HSQService
                         //endregion
 
                         //region --- Làm KS ---
-                        buserLoop:
                         while (true)
                         {
                             scanFull = 0;
                             textAnswer = "";
-                            dropDownOpen = false;
                             matrixColumnCache.clear();
 
                             int checkGDKS = HSQTools.getImageExistss(
@@ -1299,7 +1197,7 @@ public class StartAuto extends HSQService
 
                                                 if (screenSwipe == 0 && swipeDropdown)
                                                 {
-                                                    String currentXmlForSwipe = getFlexibleXML();
+                                                    String currentXmlForSwipe = HSQTools.getFlexibleXML();
                                                     android.graphics.Rect dropBounds = null;
                                                     int maxArea = 0;
 
@@ -1379,7 +1277,7 @@ public class StartAuto extends HSQService
 
                                                     screenBegin = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
 
-                                                    if (HSQTools.areAlmostSame(beforeSwipe, screenBegin, 20) || screenSwipe > 8)
+                                                    if (HSQTools.areAlmostSame(beforeSwipe, screenBegin, 20) || screenSwipe >= MAX_LOCAL_BLIND_IMAGES - 1)
                                                     {
                                                         break;
                                                     }
@@ -1430,18 +1328,23 @@ public class StartAuto extends HSQService
 
                                                     int attemptedClickToTextSteps = 0;
                                                     int successClickToTextSteps = 0;
-                                                    String lastClickToTextFailedStep = "";
-                                                    List<TextBlock> lastClickToTextFailedScreen = null;
+                                                    List<TextBlock> lastClickToTextFailedScreen;
                                                     
                                                     clickToTextMinY = 0; // Reset Y limit cho mỗi vòng trả lời mới
 
-                                                    for (int p = 0; p < splitStep.length; p++)
+                                                    for (String s : splitStep)
                                                     {
-                                                        step = splitStep[p];
+                                                        step = s;
+                                                        phoneScreen.clear();
+                                                        if (!step.contains("clicktotext") && !step.contains("clickbutton"))
+                                                        {
+                                                            phoneScreen.addAll(getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+                                                            phoneScreen.add(new TextBlock("Đã vuốt xuống", 0, 0));
+                                                        }
                                                         updateNotificationContent("thực hiện: " + step);
                                                         if (step.contains("clicktotext"))
                                                         {
-                                                            Matcher match = java.util.regex.Pattern.compile("\\{([^{}]+)\\}").matcher(step);
+                                                            Matcher match = Pattern.compile("\\{([^{}]+)\\}").matcher(step);
                                                             if (match.find())
                                                             {
                                                                 attemptedClickToTextSteps++;
@@ -1449,7 +1352,6 @@ public class StartAuto extends HSQService
                                                                 List<TextBlock> checkAnswer = clickToText(match.group(1));
                                                                 if (checkAnswer != null)
                                                                 {
-                                                                    lastClickToTextFailedStep = step;
                                                                     lastClickToTextFailedScreen = checkAnswer.stream()
                                                                             .filter(x -> x.y > 180)
                                                                             .collect(Collectors.toList());
@@ -1482,6 +1384,7 @@ public class StartAuto extends HSQService
                                                                 delay(10000);
                                                                 continue lamProfileLoop;
                                                             }
+                                                            isNextCard = false;
                                                             List<TextBlock> currentVisible = clickButton(step);
                                                             if (currentVisible != null)
                                                             {
@@ -1497,11 +1400,18 @@ public class StartAuto extends HSQService
                                                                 tempTextAnswer = textAnswer;
                                                                 continue stateMachine;
                                                             }
+
+                                                            if(isNextCard) {
+                                                                delay(5000);
+                                                                currentState = 0;
+                                                                continue stateMachine;
+                                                            }
                                                         }
                                                         else if (step.contains("multi_input"))
                                                         {
                                                             Matcher match = Pattern.compile("\\{([^~]+)~([^}]+)\\}").matcher(step);
-                                                            if (match.find()) {
+                                                            if (match.find())
+                                                            {
                                                                 String label = match.group(1).trim();
                                                                 String values = match.group(2).trim(); // Chứa "Realme|Samsung|Oppo"
                                                                 List<TextBlock> result = clickMultiInput(label, values);
@@ -1520,7 +1430,7 @@ public class StartAuto extends HSQService
                                                         }
                                                         else if (step.contains("input"))
                                                         {
-                                                            Matcher match = java.util.regex.Pattern.compile("\\{([^{}]+)\\}").matcher(step);
+                                                            Matcher match = Pattern.compile("\\{([^{}]+)\\}").matcher(step);
                                                             if (match.find() && match.group(1).contains("~"))
                                                             {
                                                                 String[] parts = match.group(1).split("~");
@@ -1543,7 +1453,7 @@ public class StartAuto extends HSQService
                                                                 }
 
                                                                 // --- GỌI HÀM BỌC THÉP THỰC THI UI ---
-                                                                List<HSQTools.TextBlock> resultScreen = clickInput(labelToFind, valueToInput);
+                                                                List<TextBlock> resultScreen = clickInput(labelToFind, valueToInput);
 
                                                                 if (resultScreen != null)
                                                                 {
@@ -1576,13 +1486,14 @@ public class StartAuto extends HSQService
                                                                     int vuotNgangLai = 0;    // Theo dõi cuộn ngang tìm CỘT
                                                                     boolean swipeUp = false; // Check xem đã đẩy HÀNG lên giữa màn chưa
 
-                                                                    checkMatrixActionLoop:
                                                                     while (true)
                                                                     {
                                                                         // 0. LẤY DATA MÀN HÌNH THÔNG MINH
                                                                         List<TextBlock> smartList = getCheckAnswerSmart();
                                                                         List<TextBlock> currentVisible = smartList.stream()
                                                                                 .filter(x -> x.y > 180 && x.y < 2900).collect(Collectors.toList());
+                                                                        phoneScreen.addAll(currentVisible);
+                                                                        phoneScreen.add(new TextBlock("Đã vuốt xuống", 0, 0));
 
                                                                         // =======================================================
                                                                         // 1. TÌM TỌA ĐỘ HÀNG GỐC (BỌC THÉP CHỐNG CẮN NHẦM "AXIORY" VÀ "AXI")
@@ -1627,7 +1538,7 @@ public class StartAuto extends HSQService
                                                                                 swipe(xCenter, yTop, xCenter, yBot, 2000); // Vuốt lên
                                                                             }
                                                                             delay(2000);
-                                                                            continue checkMatrixActionLoop;
+                                                                            continue;
                                                                         }
 
                                                                         // =======================================================
@@ -1640,7 +1551,7 @@ public class StartAuto extends HSQService
                                                                             swipe(720, rowPt.y, 720, 1200, 2000);
                                                                             delay(2000);
                                                                             swipeUp = true;
-                                                                            continue checkMatrixActionLoop;
+                                                                            continue;
                                                                         }
 
                                                                         int preciseY = rowPt.y;
@@ -1834,10 +1745,10 @@ public class StartAuto extends HSQService
                                                                                     {
                                                                                         try
                                                                                         {
-                                                                                            java.util.regex.Matcher m = java.util.regex.Pattern.compile("~([^{}]+)\\}").matcher(tempTextAnswer);
+                                                                                            Matcher m = Pattern.compile("~([^{}]+)\\}").matcher(tempTextAnswer);
                                                                                             int maxNumericCol = 0;
                                                                                             boolean isAllNumeric = true;
-                                                                                            java.util.Set<String> uniqueTextCols = new java.util.HashSet<>();
+                                                                                            Set<String> uniqueTextCols = new HashSet<>();
 
                                                                                             while (m.find())
                                                                                             {
@@ -2043,7 +1954,7 @@ public class StartAuto extends HSQService
                                                                                 swipe(1320, preciseY, 120, preciseY, 1200);
                                                                                 delay(2500);
                                                                                 vuotNgangLai++;
-                                                                                continue checkMatrixActionLoop;
+                                                                                continue;
                                                                             }
 
                                                                             swipe(120, preciseY, 1320, preciseY, 1200);
@@ -2111,11 +2022,13 @@ public class StartAuto extends HSQService
                                                                         {
                                                                             // 1. Lấy Data Màn hình để check kẹt
                                                                             List<TextBlock> currentScreen = getCheckAnswerSmart();
+                                                                            phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+                                                                            phoneScreen.add(new TextBlock("Đã vuốt xuống", 0, 0));
                                                                             List<TextBlock> currentVisible = currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList());
 
                                                                             // 2. Dùng mắt thần tìm Tâm Thẻ Cần Kéo
                                                                             android.graphics.Point sourcePt = HSQTools.smartFindTextPoint(sourceStr, heightOfScreen);
-                                                                            android.graphics.Point targetPt = null;
+                                                                            android.graphics.Point targetPt;
 
                                                                             // 3. 🌟 TOÁN HỌC THUẦN TÚY (PURE MATH) - NHANH, GỌN, CHÍNH XÁC 100%
                                                                             if (isNumericTarget)
@@ -2211,14 +2124,14 @@ public class StartAuto extends HSQService
                                                         }
                                                         else if (step.contains("click_index"))
                                                         {
-                                                            Matcher match = java.util.regex.Pattern.compile("\\{(\\d+)\\}").matcher(step);
+                                                            Matcher match = Pattern.compile("\\{(\\d+)\\}").matcher(step);
                                                             if (match.find())
                                                             {
                                                                 int targetIndex = Integer.parseInt(match.group(1));
                                                                 int currentGlobalCount = 0;
                                                                 int vuotLenLai = 0;
                                                                 int ignoreYLimit = 300;
-                                                                List<HSQTools.TextBlock> tempCompare = new ArrayList<>();
+                                                                List<TextBlock> tempCompare = new ArrayList<>();
 
                                                                 while (true)
                                                                 {
@@ -2239,11 +2152,13 @@ public class StartAuto extends HSQService
                                                                         clickableRegions = findCheckboxesInXml(xml, currentIgnoreYLimit);
                                                                     }
 
+                                                                    boolean isImageCardFallback = false;
                                                                     // 2.5. TẦNG XML ẢNH CỠ LỚN (CARD)
                                                                     if (clickableRegions.isEmpty())
                                                                     {
                                                                         String xml = HSQTools.getFlexibleXML();
                                                                         clickableRegions = findImageCardsInXml(xml, currentIgnoreYLimit);
+                                                                        if (!clickableRegions.isEmpty()) isImageCardFallback = true;
                                                                     }
 
                                                                     // 2.7 TẦNG 3: THỦ MÔN OCR (FALLBACK KHI WEBVIEW GIẤU CLASS VÀ KHÔNG CÓ ẢNH)
@@ -2261,8 +2176,10 @@ public class StartAuto extends HSQService
                                                                     }
 
                                                                     // Sắp xếp các vùng tìm thấy: Từ trên xuống dưới, từ trái qua phải (đọc như sách)
-                                                                    clickableRegions.sort((a, b) -> {
-                                                                        if (Math.abs(a.top - b.top) < 100) return Integer.compare(a.left, b.left);
+                                                                    clickableRegions.sort((a, b) ->
+                                                                    {
+                                                                        if (Math.abs(a.top - b.top) < 100)
+                                                                            return Integer.compare(a.left, b.left);
                                                                         return Integer.compare(a.top, b.top);
                                                                     });
 
@@ -2275,7 +2192,36 @@ public class StartAuto extends HSQService
                                                                             if (localIndex >= 0 && localIndex < clickableRegions.size())
                                                                             {
                                                                                 android.graphics.Rect targetRect = clickableRegions.get(localIndex);
-                                                                                click(targetRect.centerX(), targetRect.centerY(), false);
+                                                                                int clickX = targetRect.centerX();
+                                                                                int clickY = targetRect.centerY();
+                                                                                
+                                                                                if (isImageCardFallback) {
+                                                                                    int gapRightStart = targetRect.right;
+                                                                                    int gapRightEnd = widthOfScreen;
+                                                                                    int gapLeftStart = 0;
+                                                                                    int gapLeftEnd = targetRect.left;
+                                                                                    
+                                                                                    boolean hasRightGap = (gapRightEnd - gapRightStart) > (widthOfScreen * 0.12);
+                                                                                    boolean hasLeftGap = (gapLeftEnd - gapLeftStart) > (widthOfScreen * 0.12);
+                                                                                    
+                                                                                    for (android.graphics.Rect other : clickableRegions) {
+                                                                                        if (other == targetRect) continue;
+                                                                                        if (Math.abs(other.centerY() - clickY) < 100) {
+                                                                                            if (hasRightGap && other.left > clickX && other.left < gapRightEnd) hasRightGap = false;
+                                                                                            if (hasLeftGap && other.right < clickX && other.right > gapLeftStart) hasLeftGap = false;
+                                                                                        }
+                                                                                    }
+                                                                                    
+                                                                                    if (hasRightGap) {
+                                                                                        clickX = gapRightStart + (gapRightEnd - gapRightStart) / 2;
+                                                                                        updateNotificationContent("Radio ẩn: Click bên phải ảnh");
+                                                                                    } else if (hasLeftGap) {
+                                                                                        clickX = gapLeftStart + (gapLeftEnd - gapLeftStart) / 2;
+                                                                                        updateNotificationContent("Radio ẩn: Click bên trái ảnh");
+                                                                                    }
+                                                                                }
+                                                                                
+                                                                                click(clickX, clickY, false);
                                                                                 delay(2000);
                                                                                 break; // Thành công
                                                                             }
@@ -2285,6 +2231,8 @@ public class StartAuto extends HSQService
                                                                         currentGlobalCount += clickableRegions.size();
                                                                         int lastY = clickableRegions.get(clickableRegions.size() - 1).top;
                                                                         tempCompare = getCheckAnswerSmart(); // Lưu lại để check kẹt
+                                                                        phoneScreen.addAll(tempCompare.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+                                                                        phoneScreen.add(new TextBlock("Đã vuốt xuống", 0, 0));
 
                                                                         updateNotificationContent("Đã đếm " + currentGlobalCount + " ô. Vuốt tiếp...");
                                                                         swipe(720, lastY, 720, 700, 2000);
@@ -2330,7 +2278,7 @@ public class StartAuto extends HSQService
                                                         {
                                                             while (true)
                                                             {
-                                                                Matcher match = java.util.regex.Pattern.compile("\\{([^{}]+)\\}").matcher(step);
+                                                                Matcher match = Pattern.compile("\\{([^{}]+)\\}").matcher(step);
                                                                 if (match.find() && match.group(1).contains("~"))
                                                                 {
                                                                     String[] parts = match.group(1).split("~");
@@ -2338,7 +2286,7 @@ public class StartAuto extends HSQService
                                                                     String answerStr = parts[1];
 
                                                                     updateNotificationContent("Smart Block: " + headerStr + " -> " + answerStr);
-                                                                    List<HSQTools.TextBlock> tempCompare = new ArrayList<>();
+                                                                    List<TextBlock> tempCompare = new ArrayList<>();
                                                                     int vuotLenLai = 0;
                                                                     int keoHeader = 0; // Đếm số lần kéo Header để chống kẹt đáy
 
@@ -2347,8 +2295,10 @@ public class StartAuto extends HSQService
                                                                     while (true)
                                                                     {
                                                                         // 0. LẤY DỮ LIỆU MÀN HÌNH THÔNG MINH
-                                                                        List<HSQTools.TextBlock> smartList = getCheckAnswerSmart();
-                                                                        List<HSQTools.TextBlock> currentVisible = smartList.stream()
+                                                                        List<TextBlock> smartList = getCheckAnswerSmart();
+                                                                        phoneScreen.addAll(smartList.stream().filter(x -> x.y > 180 && x.y < 2900).collect(Collectors.toList()));
+                                                                        phoneScreen.add(new TextBlock("Đã vuốt xuống", 0, 0));
+                                                                        List<TextBlock> currentVisible = smartList.stream()
                                                                                 .filter(x -> x.y > 180 && x.y < 2900).collect(Collectors.toList());
 
                                                                         // =======================================================
@@ -2358,7 +2308,17 @@ public class StartAuto extends HSQService
                                                                         String cleanHeader = HSQTools.normalizeText(headerStr).replaceAll("[^a-z0-9]", "");
 
                                                                         // TÌM BẰNG OCR TRƯỚC
-                                                                        HSQTools.TextBlock foundHeader = currentVisible.stream()
+                                                                        // Tầng 1: Khớp tuyệt đối 100%
+                                                                        // 🌟 ĐẶC TRỊ BỆNH AI LƯỜI NHƯ Ý SẾP: Bỏ qua phần chữ trong ngoặc
+                                                                        // Tầng 2: Node chứa Header (Ví dụ tìm Axi, chống cắn nhầm Axiory)
+                                                                        // Tầng 3: Header chứa Node (Khóa tử hình lỗi tìm Axiory cắn Axi)
+                                                                        // Chỉ cho phép nếu chữ quét được đủ dài và gần bằng Header
+                                                                        // Tầng 4: Sai số Levenshtein toàn bộ
+                                                                        // Tầng 5: Cắt tiền tố (Prefix matching) - Dành cho câu hỏi cõng giải thích
+                                                                        // 🌟 THUẬT TOÁN SẮP XẾP MỚI:
+                                                                        // Ưu tiên 1: Chữ nào khớp chính xác 100% thì đưa lên Top 1.
+                                                                        // Ưu tiên 2: Nếu cùng độ chính xác, ưu tiên chữ nằm gần đỉnh màn hình nhất (Y nhỏ nhất).
+                                                                        TextBlock foundHeader = currentVisible.stream()
                                                                                 .filter(x ->
                                                                                 {
                                                                                     String nodeTxt = HSQTools.normalizeText(x.text).replaceAll("[^a-z0-9]", "");
@@ -2370,7 +2330,8 @@ public class StartAuto extends HSQService
                                                                                         return true;
 
                                                                                     // 🌟 ĐẶC TRỊ BỆNH AI LƯỜI NHƯ Ý SẾP: Bỏ qua phần chữ trong ngoặc
-                                                                                    if (x.text.contains("(") || x.text.contains("[")) {
+                                                                                    if (x.text.contains("(") || x.text.contains("["))
+                                                                                    {
                                                                                         String beforeBracket = x.text.split("[(\\[]")[0];
                                                                                         String cleanBefore = HSQTools.normalizeText(beforeBracket).replaceAll("[^a-z0-9]", "");
                                                                                         if (!cleanBefore.isEmpty() && cleanBefore.equals(cleanHeader))
@@ -2404,21 +2365,15 @@ public class StartAuto extends HSQService
                                                                                     if (nodeTxt.length() >= cleanHeader.length())
                                                                                     {
                                                                                         String prefix = nodeTxt.substring(0, cleanHeader.length());
-                                                                                        if (HSQTools.levenshtein(prefix, cleanHeader) <= Math.max(1, (int) (cleanHeader.length() * 0.2)))
-                                                                                            return true;
+                                                                                        return HSQTools.levenshtein(prefix, cleanHeader) <= Math.max(1, (int) (cleanHeader.length() * 0.2));
                                                                                     }
 
                                                                                     return false;
-                                                                                })
-                                                                                // 🌟 THUẬT TOÁN SẮP XẾP MỚI:
-                                                                                // Ưu tiên 1: Chữ nào khớp chính xác 100% thì đưa lên Top 1.
-                                                                                // Ưu tiên 2: Nếu cùng độ chính xác, ưu tiên chữ nằm gần đỉnh màn hình nhất (Y nhỏ nhất).
-                                                                                .sorted(Comparator.comparingInt((HSQTools.TextBlock x) ->
+                                                                                }).min(Comparator.comparingInt((TextBlock x) ->
                                                                                 {
                                                                                     String nodeTxt = HSQTools.normalizeText(x.text).replaceAll("[^a-z0-9]", "");
                                                                                     return nodeTxt.equals(cleanHeader) ? 0 : 1;
-                                                                                }).thenComparingInt(x -> x.y))
-                                                                                .findFirst().orElse(null);
+                                                                                }).thenComparingInt(x -> x.y)).orElse(null);
 
                                                                         if (foundHeader != null)
                                                                         {
@@ -2486,13 +2441,11 @@ public class StartAuto extends HSQService
                                                                         {
                                                                             String cleanAnswerForMode = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(answerStr));
                                                                             boolean isNumeric = cleanAnswerForMode.matches("\\d+");
-                                                                            final int finalTargetY = targetY;
 
                                                                             if (isNumeric)
                                                                             {
                                                                                 // CHIẾN THUẬT 1: TÌM THEO TEXT SỐ (Ví dụ click_block {Cau 1~5})
-                                                                                String cleanAns = cleanAnswerForMode;
-                                                                                HSQTools.TextBlock ansNode = findClickBlockAnswerNode(currentVisible, cleanAns, finalTargetY, false);
+                                                                                TextBlock ansNode = findClickBlockAnswerNode(currentVisible, cleanAnswerForMode, targetY, false);
 
 
                                                                                 if (ansNode != null)
@@ -2503,9 +2456,9 @@ public class StartAuto extends HSQService
                                                                                 {
                                                                                     // CHIẾN THUẬT 2: TÌM SỐ ẨN TRONG HÀNG NGANG (MATRIX KIỂU CŨ)
                                                                                     String xml = HSQTools.getFlexibleXML();
-                                                                                    java.util.List<android.graphics.Rect> scaleElements = new ArrayList<>();
+                                                                                    List<android.graphics.Rect> scaleElements = new ArrayList<>();
 
-                                                                                    int preciseAnsY = finalTargetY + 100; // Khởi tạo áng chừng
+                                                                                    int preciseAnsY = targetY + 100; // Khởi tạo áng chừng
                                                                                     try
                                                                                     {
                                                                                         javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
@@ -2515,7 +2468,7 @@ public class StartAuto extends HSQService
 
                                                                                         for (int offset = 0; offset <= 1000; offset += 50)
                                                                                         {
-                                                                                            int testY = finalTargetY + offset;
+                                                                                            int testY = targetY + offset;
                                                                                             for (int i = 0; i < nodes.getLength(); i++)
                                                                                             {
                                                                                                 org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
@@ -2539,21 +2492,27 @@ public class StartAuto extends HSQService
                                                                                         // 🌟 FIX OFF-BY-ONE BỌC THÉP CHO DÃY SỐ NPS
                                                                                         // Trước tiên, tìm xem trong dàn XML có text CHÍNH XÁC bằng con số đó không
                                                                                         int exactMatchX = -1;
-                                                                                        for (int i = 0; i < nodes.getLength(); i++) {
+                                                                                        for (int i = 0; i < nodes.getLength(); i++)
+                                                                                        {
                                                                                             org.w3c.dom.Element n = (org.w3c.dom.Element) nodes.item(i);
                                                                                             android.graphics.Rect r = HSQTools.parseBoundsFromXml(n.getAttribute("bounds"));
-                                                                                            if (r != null && Math.abs(r.centerY() - preciseAnsY) <= 60) {
+                                                                                            if (r != null && Math.abs(r.centerY() - preciseAnsY) <= 60)
+                                                                                            {
                                                                                                 String nodeTxt = n.getAttribute("text").trim();
-                                                                                                if (nodeTxt.equals(answerStr)) {
+                                                                                                if (nodeTxt.equals(answerStr))
+                                                                                                {
                                                                                                     exactMatchX = r.centerX();
                                                                                                     break;
                                                                                                 }
                                                                                             }
                                                                                         }
 
-                                                                                        if (exactMatchX != -1) {
+                                                                                        if (exactMatchX != -1)
+                                                                                        {
                                                                                             finalClickPt = new android.graphics.Point(exactMatchX, preciseAnsY);
-                                                                                        } else if (!scaleElements.isEmpty()) {
+                                                                                        }
+                                                                                        else if (!scaleElements.isEmpty())
+                                                                                        {
                                                                                             // Gọt trùng lặp (Deduplicate)
                                                                                             List<android.graphics.Rect> uniqueBoxes = new ArrayList<>();
                                                                                             for (android.graphics.Rect r : scaleElements)
@@ -2577,8 +2536,10 @@ public class StartAuto extends HSQService
                                                                                             {
                                                                                                 org.w3c.dom.Element xNode = (org.w3c.dom.Element) nodes.item(i);
                                                                                                 android.graphics.Rect xR = HSQTools.parseBoundsFromXml(xNode.getAttribute("bounds"));
-                                                                                                if (xR == null) continue;
-                                                                                                if (Math.abs(xR.centerY() - preciseAnsY) > 60) continue;
+                                                                                                if (xR == null)
+                                                                                                    continue;
+                                                                                                if (Math.abs(xR.centerY() - preciseAnsY) > 60)
+                                                                                                    continue;
                                                                                                 String xText = xNode.getAttribute("text").trim();
                                                                                                 if (xText.equals(answerStr))
                                                                                                 {
@@ -2592,11 +2553,6 @@ public class StartAuto extends HSQService
                                                                                             }
                                                                                             else
                                                                                             {
-                                                                                                // Fallback: dùng index (trừ 1 chỉ khi dãy bắt đầu từ 1)
-                                                                                                int firstNum = -1;
-                                                                                                try { firstNum = Integer.parseInt(uniqueBoxes.isEmpty() ? "-1" :
-                                                                                                        // lấy text node đầu tiên nếu có... fallback về index offset
-                                                                                                        "0"); } catch(Exception ignored) {}
                                                                                                 int targetIndex = Integer.parseInt(answerStr); // Không trừ 1 vì index 0 = số 0
                                                                                                 if (targetIndex >= 0 && targetIndex < uniqueBoxes.size())
                                                                                                     finalClickPt = new android.graphics.Point(uniqueBoxes.get(targetIndex).centerX(), preciseAnsY);
@@ -2612,9 +2568,8 @@ public class StartAuto extends HSQService
                                                                             else
                                                                             {
                                                                                 // CHIẾN THUẬT CHỮ (ĐÃ BỌC THÉP CHỐNG CẮN NGƯỢC)
-                                                                                String cleanAns = cleanAnswerForMode;
 
-                                                                                HSQTools.TextBlock ansNode = findClickBlockAnswerNode(currentVisible, cleanAns, finalTargetY, true);
+                                                                                TextBlock ansNode = findClickBlockAnswerNode(currentVisible, cleanAnswerForMode, targetY, true);
                                                                                 if (ansNode != null)
                                                                                 {
                                                                                     int finalClickX = ansNode.x;
@@ -2636,7 +2591,7 @@ public class StartAuto extends HSQService
                                                                                                 String rawText = node.getAttribute("text") + " " + node.getAttribute("content-desc");
                                                                                                 String xmlText = HSQTools.normalizeText(rawText).replaceAll("[^a-z0-9]", "");
 
-                                                                                                if (!xmlText.isEmpty() && isClickAnswerMatchOcrFriendly(xmlText, cleanAns, true))
+                                                                                                if (!xmlText.isEmpty() && isClickAnswerMatchOcrFriendly(xmlText, cleanAnswerForMode, true))
                                                                                                 {
                                                                                                     android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
                                                                                                     if (r != null && Math.abs(r.centerY() - finalClickY) <= 40)
@@ -2692,7 +2647,7 @@ public class StartAuto extends HSQService
                                                                             if (vuotLenLai == 0)
                                                                             {
                                                                                 // CHIỀU ĐI XUỐNG
-                                                                                if (targetY != -1 && targetY > 350)
+                                                                                if (targetY > 350)
                                                                                 {
                                                                                     updateNotificationContent("Đẩy Header lên đỉnh để lộ đáp án...");
                                                                                     swipe(xs, targetY, xs, 250, 2000);
@@ -2731,7 +2686,7 @@ public class StartAuto extends HSQService
                                                         }
                                                         else if (step.contains("auto_choose"))
                                                         {
-                                                            Matcher match = java.util.regex.Pattern.compile("\\{([^{}]+)\\}").matcher(step);
+                                                            Matcher match = Pattern.compile("\\{([^{}]+)\\}").matcher(step);
                                                             if (match.find() && match.group(1).contains("~"))
                                                             {
                                                                 String[] parts = match.group(1).split("~");
@@ -2749,7 +2704,7 @@ public class StartAuto extends HSQService
                                                                         .filter(x ->
                                                                         {
                                                                             String txt = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(x.text));
-                                                                            return isClickAnswerMatchOcrFriendly(x.text, normAnswer, true);
+                                                                            return isClickAnswerMatchOcrFriendly(txt, normAnswer, true);
                                                                         })
                                                                         .min(Comparator.comparingInt(x -> Math.abs(x.x - xCenter))) // Ưu tiên gần tâm
                                                                         .orElse(null);
@@ -2824,12 +2779,14 @@ public class StartAuto extends HSQService
                                                                             // Bàn phím không lên -> List Dropdown vừa được xổ ra
                                                                             updateNotificationContent("Đã xổ Dropdown -> Tìm đáp án lần 2");
                                                                             List<TextBlock> afterOpenVisible = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                                                                            phoneScreen.addAll(afterOpenVisible);
+                                                                            phoneScreen.add(new TextBlock("Đã vuốt xuống", 0, 0));
 
                                                                             TextBlock dropdownTarget = afterOpenVisible.stream()
                                                                                     .filter(x ->
                                                                                     {
                                                                                         String txt = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(x.text));
-                                                                                        return isClickAnswerMatchOcrFriendly(x.text, normAnswer, true);
+                                                                                        return isClickAnswerMatchOcrFriendly(txt, normAnswer, true);
                                                                                     })
                                                                                     .min(Comparator.comparingInt(x -> Math.abs(x.x - xCenter)))
                                                                                     .orElse(null);
@@ -2858,20 +2815,28 @@ public class StartAuto extends HSQService
                                                         }
                                                         else if (step.contains("slider"))
                                                         {
-                                                            Matcher match = java.util.regex.Pattern.compile("\\{([^~]+)~([^}]+)\\}").matcher(step);
-                                                            if (match.find()) {
+                                                            Matcher match = Pattern.compile("\\{([^~]+)~([^}]+)\\}").matcher(step);
+                                                            if (match.find())
+                                                            {
                                                                 String labelToFind = match.group(1).trim();
                                                                 String percentStr = match.group(2).trim();
 
                                                                 int percent = 50; // Mặc định là 50% nếu AI ngáo
-                                                                try {
+                                                                try
+                                                                {
                                                                     percent = Integer.parseInt(percentStr.replaceAll("[^0-9]", ""));
-                                                                } catch (Exception e) {}
+                                                                }
+                                                                catch (Exception ignored)
+                                                                {
+                                                                }
 
-                                                                List<HSQTools.TextBlock> resultScreen = clickSlider(labelToFind, percent);
-                                                                if (resultScreen != null) {
-                                                                    handleActionFailure("Slider_Error", step, resultScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()),
-                                                                            "Đéo tìm thấy thanh trượt cho câu [" + labelToFind + "]", splitTextAnswer[1]);
+                                                                List<TextBlock> resultScreen = clickSlider(labelToFind, percent);
+                                                                if (resultScreen != null)
+                                                                {
+                                                                    handleActionFailure(
+                                                                            "Slider_Error", step, resultScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()),
+                                                                            "Đéo tìm thấy thanh trượt cho câu [" + labelToFind + "]", splitTextAnswer[1]
+                                                                    );
                                                                     tempTextAnswer = textAnswer;
                                                                     continue stateMachine;
                                                                 }
@@ -2945,7 +2910,7 @@ public class StartAuto extends HSQService
                                                             AINguL = 0;
                                                             createAgain = 0;
                                                             currentState = STATE_GET_ANSWER;
-                                                            continue stateMachine;
+                                                            continue;
                                                         }
                                                         createAgain++;
                                                         createNewChatGemByApi(customAgentRule, true);
@@ -2958,7 +2923,7 @@ public class StartAuto extends HSQService
                                                         textAnswer = sendChatToGemByApi("lỗi phân tích cú pháp, kiểm tra lại các rule và trả lời lại câu trên");
                                                         currentState = STATE_ANSWER_OK;
                                                     }
-                                                    continue stateMachine;
+                                                    continue;
                                                 }
                                                 tempSwipeCount = 0;
 
@@ -2975,7 +2940,6 @@ public class StartAuto extends HSQService
                                     }
                                 }
                             }
-                            continue buserLoop;
                         } // End buserLoop
                     }
                     delay(1000);
@@ -3035,9 +2999,15 @@ public class StartAuto extends HSQService
                         {
                             continue; // Nếu có lệnh update mà tải lỗi thì bắt vòng lặp load lại
                         }
-                        AIWebSite = control.getString("AIWebSite");
-                        AIApiKey = control.getString("AIApiKey");
-                        aiModel = control.getString("aiModel");
+                        AIWebSite1 = control.getString("AIWebSite1");
+                        AIApiKey1 = control.getString("AIApiKey1");
+                        aiModel1 = control.getString("aiModel1");
+                        AIWebSite = AIWebSite1;
+                        AIApiKey = AIApiKey1;
+                        aiModel = aiModel1;
+                        AIWebSite2 = control.getString("AIWebSite2");
+                        AIApiKey2 = control.getString("AIApiKey2");
+                        aiModel2 = control.getString("aiModel2");
                         AIProxyEnabled = control.optBoolean("AIProxyEnabled", false);
                         AIProxyUrl = control.optString("AIProxyUrl", "https://quaykute.id.vn");
                         break;
@@ -3239,6 +3209,7 @@ public class StartAuto extends HSQService
         return true;
     }
 
+    @SuppressLint("SdCardPath")
     private boolean updatePromt()
     {
         show();
@@ -3327,6 +3298,7 @@ public class StartAuto extends HSQService
         return true; // Nếu bằng version nhau thì phớt lờ, coi như đã up-to-date
     }
 
+    @SuppressLint("SdCardPath")
     private boolean updateProfile()
     {
         show();
@@ -3378,7 +3350,6 @@ public class StartAuto extends HSQService
         }
     }
 
-
     public static void openDeepLink(String uri, String packageName)
     {
         Intent intent = new Intent(Intent.ACTION_VIEW);
@@ -3427,7 +3398,7 @@ public class StartAuto extends HSQService
         // 4. Gộp toàn bộ nội dung log lại thành 1 chuỗi
         String logContent = "Date: " + currentTime + "\n"
                 + "Step Info: " + textLogs + "\n"
-                + dashes.toString();
+                + dashes;
 
         // 5. Ghi nối vào file bằng hàm siêu tốc của bạn
         HSQFileHelper.writetoFile(logContent, logFilePath);
@@ -3460,7 +3431,7 @@ public class StartAuto extends HSQService
     {
         int tryAgain = 0;
         int apiErrorCount = 0;
-        String textAnswer = "";
+        String textAnswer;
         if (prompt.length() < 2)
         {
             prompt = "Bám sát profile và các rule. Không giải thích dài dòng";
@@ -3516,14 +3487,7 @@ public class StartAuto extends HSQService
             // Để đảm bảo thứ tự luôn là: Capa1 -> Capa2 -> Capb1 ...
             // ==========================================================
             java.util.Arrays.sort(
-                    files, new java.util.Comparator<File>()
-                    {
-                        @Override
-                        public int compare(File f1, File f2)
-                        {
-                            return f1.getName().compareTo(f2.getName());
-                        }
-                    }
+                    files, Comparator.comparing(File::getName)
             );
 
             for (File f : files)
@@ -3548,9 +3512,25 @@ public class StartAuto extends HSQService
                 Log.d("TEST_TREO", "4. Đã thoát ra khỏi hàm, kết quả là: " + textAnswer);
                 if (textAnswer.startsWith("API Error: 429") || textAnswer.contains("\"code\": 429") || textAnswer.contains("\"status\": \"RESOURCE_EXHAUSTED\"")
                         || textAnswer.contains("Quota exceeded for metric") || textAnswer.contains("\"code\": 403")
-                        || textAnswer.contains("has been suspended"))
+                        || textAnswer.contains("has been suspended") || textAnswer.contains("API Error: 530"))
                 {
                     delay(15000);
+                    if(changedSite == 0 && AIApiKey2 != null && !AIApiKey2.trim().isEmpty())
+                    {
+                        AIWebSite = AIWebSite2;
+                        AIApiKey = AIApiKey2;
+                        aiModel = aiModel2;
+                        changedSite++;
+                    }
+                    else {
+                        AIWebSite = AIWebSite1;
+                        AIApiKey = AIApiKey1;
+                        aiModel = aiModel1;
+                        changedSite = 0;
+                    }
+                    try { if (AIHelper != null) AIHelper.freeRam(); } catch (Exception ignored) {}
+                    AIHelper = createAIHelper();
+                    createNewChatGemByApi(customAgentRule, true);
                     continue;
                 }
                 else if (textAnswer.startsWith("API Error:") || textAnswer.startsWith("Exception"))
@@ -3583,14 +3563,35 @@ public class StartAuto extends HSQService
                         continue;
                     }
                     apiErrorCount++;
-                    if (apiErrorCount >= 3) {
+                    if (apiErrorCount == 3) {
                         updateNotificationContent("Lỗi API 502 quá lỳ! Reset não AI...");
+                        try { if (AIHelper != null) AIHelper.freeRam(); } catch (Exception ignored) {}
+                        AIHelper = createAIHelper();
+                        createNewChatGemByApi(customAgentRule, true);
+                        delay(2000);
+                    }
+                    else if (apiErrorCount > 3) {
+                        updateNotificationContent("Lỗi API 502 quá lỳ! thay web ...");
+                        if(changedSite == 0 && AIApiKey2 != null && !AIApiKey2.trim().isEmpty())
+                        {
+                            AIWebSite = AIWebSite2;
+                            AIApiKey = AIApiKey2;
+                            aiModel = aiModel2;
+                            changedSite++;
+                        }
+                        else {
+                            AIWebSite = AIWebSite1;
+                            AIApiKey = AIApiKey1;
+                            aiModel = aiModel1;
+                            changedSite = 0;
+                        }
                         try { if (AIHelper != null) AIHelper.freeRam(); } catch (Exception ignored) {}
                         AIHelper = createAIHelper();
                         createNewChatGemByApi(customAgentRule, true);
                         apiErrorCount = 0;
                         delay(2000);
-                    } else {
+                    }
+                    else {
                         updateNotificationContent("Lỗi API/Mạng (" + apiErrorCount + "/3): " + textAnswer + ". Đợi 15s...");
                         HSQTools.delay(15000);
                     }
@@ -3653,14 +3654,31 @@ public class StartAuto extends HSQService
                 String textAnswer = AIHelper.sendMessageWithImages(chatContent, null);
                 updateNotificationContent("API Trả về: " + textAnswer);
 
-                if (textAnswer.startsWith("API Error: 429") || textAnswer.contains("\"code\": 429") ||
-                        textAnswer.contains("\"status\": \"RESOURCE_EXHAUSTED\"") || textAnswer.contains("Quota exceeded for metric") || textAnswer.contains("\"code\": 403")
+
+                if (textAnswer.startsWith("API Error: 429") || textAnswer.contains("\"code\": 429") || textAnswer.contains("\"status\": \"RESOURCE_EXHAUSTED\"")
+                        || textAnswer.contains("Quota exceeded for metric") || textAnswer.contains("\"code\": 403")
                         || textAnswer.contains("has been suspended"))
                 {
                     delay(15000);
+                    if(changedSite == 0 && AIApiKey2 != null && !AIApiKey2.trim().isEmpty())
+                    {
+                        AIWebSite = AIWebSite2;
+                        AIApiKey = AIApiKey2;
+                        aiModel = aiModel2;
+                        changedSite++;
+                    }
+                    else {
+                        AIWebSite = AIWebSite1;
+                        AIApiKey = AIApiKey1;
+                        aiModel = aiModel1;
+                        changedSite = 0;
+                    }
+                    try { if (AIHelper != null) AIHelper.freeRam(); } catch (Exception ignored) {}
+                    AIHelper = createAIHelper();
+                    createNewChatGemByApi(customAgentRule, true);
                     continue;
                 }
-                else if (textAnswer.startsWith("API Error:") || textAnswer.startsWith("Exception:"))
+                else if (textAnswer.startsWith("API Error:") || textAnswer.startsWith("Exception"))
                 {
                     if (textAnswer.contains("StackOverflowError"))
                     {
@@ -3690,14 +3708,35 @@ public class StartAuto extends HSQService
                         continue;
                     }
                     apiErrorCount++;
-                    if (apiErrorCount >= 3) {
+                    if (apiErrorCount == 3) {
                         updateNotificationContent("Lỗi API 502 quá lỳ! Reset não AI...");
+                        try { if (AIHelper != null) AIHelper.freeRam(); } catch (Exception ignored) {}
+                        AIHelper = createAIHelper();
+                        createNewChatGemByApi(customAgentRule, true);
+                        delay(2000);
+                    }
+                    else if (apiErrorCount > 3) {
+                        updateNotificationContent("Lỗi API 502 quá lỳ! thay web ...");
+                        if(changedSite == 0 && AIApiKey2 != null && !AIApiKey2.trim().isEmpty())
+                        {
+                            AIWebSite = AIWebSite2;
+                            AIApiKey = AIApiKey2;
+                            aiModel = aiModel2;
+                            changedSite++;
+                        }
+                        else {
+                            AIWebSite = AIWebSite1;
+                            AIApiKey = AIApiKey1;
+                            aiModel = aiModel1;
+                            changedSite = 0;
+                        }
                         try { if (AIHelper != null) AIHelper.freeRam(); } catch (Exception ignored) {}
                         AIHelper = createAIHelper();
                         createNewChatGemByApi(customAgentRule, true);
                         apiErrorCount = 0;
                         delay(2000);
-                    } else {
+                    }
+                    else {
                         updateNotificationContent("Lỗi API/Mạng (" + apiErrorCount + "/3): " + textAnswer + ". Đợi 15s...");
                         HSQTools.delay(15000);
                     }
@@ -3753,118 +3792,6 @@ public class StartAuto extends HSQService
     {
         inputText("", null, false);
     }
-
-    /**
-     * Lấy XML linh hoạt kết hợp siêu tốc độ của ASBL và sự trâu bò của Uiautomator
-     */
-    private String getFlexibleXML()
-    {
-        // 1. Lấy XML thẳng từ não của ASBL (Siêu tốc độ 10ms - Không cần Socket)
-        String xml = getXmlFromASBL();
-
-        // 2. Kiểm tra xem XML có bị "MÙ" (tàng hình WebView) không
-        // Cắt chuỗi theo chữ "<node" để đếm số lượng tag, nhanh hơn dùng Regex
-        int nodeCount = 0;
-        if (xml != null && !xml.isEmpty())
-        {
-            nodeCount = xml.split("<node").length - 1;
-        }
-
-        return xml;
-    }
-
-    // =======================================================
-    // VŨ KHÍ 1: TỰ BUILD XML TỪ QUYỀN TRỢ NĂNG (NHANH NHƯ CHỚP)
-    // =======================================================
-    private String getXmlFromASBL()
-    {
-        try
-        {
-            AccessibilityNodeInfo root = ASBLBridgeService.asblService.getRootInActiveWindow();
-            if (root == null) return "";
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>\n");
-            sb.append("<hierarchy rotation=\"0\">\n");
-
-            // Gọi hàm đệ quy để quét sạch Node và vẽ ra XML
-            dumpNodeRec(root, sb, 0);
-
-            sb.append("</hierarchy>");
-            root.recycle(); // Giải phóng
-            return sb.toString();
-        }
-        catch (Exception e)
-        {
-            android.util.Log.e("HSQTools", "Lỗi build XML từ ASBL: " + e.getMessage());
-            return "";
-        }
-    }
-
-    // Đệ quy vẽ từng thẻ <node> y hệt định dạng của Uiautomator để Regex của sếp bắt đéo trượt phát nào
-    private void dumpNodeRec(android.view.accessibility.AccessibilityNodeInfo node, StringBuilder sb, int index)
-    {
-        if (node == null) return;
-
-        sb.append("<node index=\"").append(index).append("\" ");
-        sb.append("text=\"").append(escapeXml(node.getText())).append("\" ");
-        sb.append("resource-id=\"").append(escapeXml(node.getViewIdResourceName())).append("\" ");
-        sb.append("class=\"").append(escapeXml(node.getClassName())).append("\" ");
-        sb.append("package=\"").append(escapeXml(node.getPackageName())).append("\" ");
-        sb.append("content-desc=\"").append(escapeXml(node.getContentDescription())).append("\" ");
-
-        // 🌟 KHẢM THÊM THẰNG NÀY ĐỂ XML FALLBACK CÓ DỮ LIỆU ĐỂ LỌC
-        sb.append("visible-to-user=\"").append(node.isVisibleToUser()).append("\" ");
-
-        sb.append("checkable=\"").append(node.isCheckable()).append("\" ");
-        sb.append("checked=\"").append(node.isChecked()).append("\" ");
-        sb.append("clickable=\"").append(node.isClickable()).append("\" ");
-        sb.append("enabled=\"").append(node.isEnabled()).append("\" ");
-        sb.append("focusable=\"").append(node.isFocusable()).append("\" ");
-        sb.append("focused=\"").append(node.isFocused()).append("\" ");
-        sb.append("scrollable=\"").append(node.isScrollable()).append("\" ");
-        sb.append("long-clickable=\"").append(node.isLongClickable()).append("\" ");
-        sb.append("password=\"").append(node.isPassword()).append("\" ");
-        sb.append("selected=\"").append(node.isSelected()).append("\" ");
-
-        android.graphics.Rect bounds = new android.graphics.Rect();
-        node.getBoundsInScreen(bounds);
-        sb.append("bounds=\"[").append(bounds.left).append(",").append(bounds.top).append("][")
-                .append(bounds.right).append(",").append(bounds.bottom).append("]\" ");
-
-        int childCount = node.getChildCount();
-        if (childCount == 0)
-        {
-            sb.append("/>\n");
-        }
-        else
-        {
-            sb.append(">\n");
-            for (int i = 0; i < childCount; i++)
-            {
-                android.view.accessibility.AccessibilityNodeInfo child = node.getChild(i);
-                if (child != null)
-                {
-                    dumpNodeRec(child, sb, i);
-                    child.recycle();
-                }
-            }
-            sb.append("</node>\n");
-        }
-    }
-
-    // Hàm chống lỗi XML (Kẻo Regex parse bị ngáo)
-    private String escapeXml(CharSequence text)
-    {
-        if (text == null) return "";
-        return text.toString()
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&apos;");
-    }
-
     /**
      * Mắt thần dò ô Input: Tìm ô cho phép nhập liệu nằm gần dòng Text nhất
      */
@@ -4095,15 +4022,22 @@ public class StartAuto extends HSQService
         try
         {
             // Quét trọn gói tag node để bóc tách thuộc tính độc lập
-            Pattern pattern = Pattern.compile("<node\\s+([^>]*?)bounds=\"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]\"");
+            Pattern pattern = Pattern.compile("<node\\s+([^>]*?)bounds=\"\\[(\\d+),(\\d+)]\\[(\\d+),(\\d+)]\"");
             Matcher matcher = pattern.matcher(xml);
             while (matcher.find())
             {
-                String attributes = matcher.group(1);
-                int left = Integer.parseInt(matcher.group(2));
-                int top = Integer.parseInt(matcher.group(3));
-                int right = Integer.parseInt(matcher.group(4));
-                int bottom = Integer.parseInt(matcher.group(5));
+                String attributes = matcher.group(1);String g2 = matcher.group(2);
+                String g3 = matcher.group(3);
+                String g4 = matcher.group(4);
+                String g5 = matcher.group(5);
+
+// Nếu vì lý do siêu nhiên nào đó mà null thì bỏ qua, đi tìm cụm tiếp theo
+                if (g2 == null || g3 == null || g4 == null || g5 == null) continue;
+
+                int left = Integer.parseInt(g2);
+                int top = Integer.parseInt(g3);
+                int right = Integer.parseInt(g4);
+                int bottom = Integer.parseInt(g5);
 
                 int cx = (left + right) / 2;
                 int cy = (top + bottom) / 2;
@@ -4111,6 +4045,7 @@ public class StartAuto extends HSQService
                 if (cy > 180 && cy < (heightOfScreen - 150))
                 {
                     String text = "";
+                    assert attributes != null;
                     Matcher textMatch = Pattern.compile("text=\"([^\"]*)\"").matcher(attributes);
                     if (textMatch.find()) text = textMatch.group(1);
 
@@ -4119,11 +4054,15 @@ public class StartAuto extends HSQService
                     if (descMatch.find()) desc = descMatch.group(1);
 
                     // Ưu tiên text, nếu trống trải thì vồ lấy content-desc
-                    String finalTxt = (!text.trim().isEmpty()) ? text : desc;
-
-                    if (!finalTxt.trim().isEmpty())
+                    String finalTxt = null;
+                    if (text != null)
                     {
-                        list.add(new HSQTools.TextBlock(finalTxt, cx, cy));
+                        finalTxt = (!text.trim().isEmpty()) ? text : desc;
+                    }
+
+                    if (finalTxt != null && !finalTxt.trim().isEmpty())
+                    {
+                        list.add(new TextBlock(finalTxt, cx, cy));
                     }
                 }
             }
@@ -4132,179 +4071,6 @@ public class StartAuto extends HSQService
         {
         }
         return list;
-    }
-
-    private List<HSQTools.TextBlock> getCheckAnswerSmart_O()
-    {
-        int tryAgain = 0;
-        while (true)
-        {
-            try
-            {
-                List<HSQTools.TextBlock> finalGrid = new ArrayList<>();
-                List<String> blacklist = Arrays.asList("back button", "offerwall", "skip to main content");
-
-                class AsblNodeTemp
-                {
-                    String text;
-                    int cx, cy, left, right;
-                    String clazz;
-                    boolean isClickable;
-
-                    AsblNodeTemp(String t, int x, int y, int l, int r, String clz, boolean click)
-                    {
-                        text = t;
-                        cx = x;
-                        cy = y;
-                        left = l;
-                        right = r;
-                        clazz = clz;
-                        isClickable = click;
-                    }
-                }
-                List<AsblNodeTemp> asblList = new ArrayList<>();
-
-                AccessibilityNodeInfo root = ASBLBridgeService.asblService.getRootInActiveWindow();
-                if (root != null)
-                {
-                    root.refresh();
-                    java.util.List<AccessibilityNodeInfo> allNodes = new ArrayList<>();
-                    HSQTools.getAllNodesRec(root, allNodes);
-
-                    for (int i = 0; i < allNodes.size(); i++)
-                    {
-                        AccessibilityNodeInfo node = allNodes.get(i);
-                        CharSequence nodeText = node.getText();
-                        if (nodeText == null || nodeText.toString().trim().isEmpty())
-                            nodeText = node.getContentDescription();
-
-                        if (nodeText != null && !nodeText.toString().trim().isEmpty())
-                        {
-                            String rawText = nodeText.toString();
-                            if (blacklist.contains(rawText.toLowerCase().trim())) continue;
-
-                            android.graphics.Rect bounds = new android.graphics.Rect();
-                            node.getBoundsInScreen(bounds);
-
-                            if (bounds.left <= 0 || bounds.width() > (widthOfScreen * 0.8))
-                            {
-                                for (int j = i + 1; j <= Math.min(i + 3, allNodes.size() - 1); j++)
-                                {
-                                    AccessibilityNodeInfo neighbor = allNodes.get(j);
-                                    if (neighbor != null)
-                                    {
-                                        android.graphics.Rect neighborBounds = new android.graphics.Rect();
-                                        neighbor.getBoundsInScreen(neighborBounds);
-                                        if (neighborBounds.left > 10 && neighborBounds.width() < (widthOfScreen * 0.8) && neighborBounds.height() > 10)
-                                        {
-                                            bounds = neighborBounds;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (bounds.centerY() > 180 && bounds.width() > 5 && bounds.height() > 5 && bounds.width() < (widthOfScreen * 0.9) && bounds.height() < 500)
-                            {
-                                asblList.add(new AsblNodeTemp(
-                                        rawText, bounds.centerX(), bounds.centerY(), bounds.left, bounds.right,
-                                        node.getClassName() != null ? node.getClassName().toString() : "",
-                                        node.isClickable()
-                                ));
-                            }
-                        }
-                    }
-                    root.recycle();
-                }
-
-                List<HSQTools.TextBlock> ocrList = HSQTools.getOcrTextBlocks();
-
-                for (AsblNodeTemp asblNode : asblList)
-                {
-                    String cleanAsbl = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(asblNode.text));
-                    if (cleanAsbl.isEmpty() || blacklist.contains(cleanAsbl)) continue;
-                    boolean isVisuallyReal = false;
-                    int bestX = asblNode.cx;
-                    int bestY = asblNode.cy;
-
-                    for (HSQTools.TextBlock ocrNode : ocrList)
-                    {
-                        if (Math.abs(ocrNode.y - asblNode.cy) <= 80)
-                        {
-                            if (ocrNode.x >= (asblNode.left - 100) && ocrNode.x <= (asblNode.right + 100))
-                            {
-                                bestX = ocrNode.x;
-                                bestY = ocrNode.y;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (isVisuallyReal)
-                    {
-                        finalGrid.add(new HSQTools.TextBlock(asblNode.text, bestX, bestY));
-                    }
-                }
-
-                for (HSQTools.TextBlock ocrNode : ocrList)
-                {
-                    String cleanOcr = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(ocrNode.text));
-                    if (cleanOcr.isEmpty() || cleanOcr.length() < 3 || blacklist.contains(cleanOcr))
-                        continue;
-
-                    boolean alreadyAdded = false;
-                    for (HSQTools.TextBlock fNode : finalGrid)
-                    {
-                        if (Math.abs(fNode.y - ocrNode.y) <= 50 && Math.abs(fNode.x - ocrNode.x) <= 300)
-                        {
-                            alreadyAdded = true;
-                            break;
-                        }
-                    }
-
-                    if (!alreadyAdded)
-                    {
-                        finalGrid.add(ocrNode);
-                    }
-                }
-
-                finalGrid.sort((node1, node2) ->
-                {
-                    if (Math.abs(node1.y - node2.y) <= 15)
-                    {
-                        return Integer.compare(node1.x, node2.x);
-                    }
-                    return Integer.compare(node1.y, node2.y);
-                });
-
-                finalGrid = finalGrid.stream()
-                        .filter(x -> x.y > 180).collect(Collectors.toList());
-
-                if (finalGrid.size() == 0)
-                {
-                    if (tryAgain == 0)
-                    {
-                        swipe(xs, yBot, xs, yTop, 2000);
-                        delay(2000);
-                        swipe(xs, yTop, xs, yBot, 2000);
-                        delay(5000);
-                        tryAgain++;
-                        continue;
-                    }
-                    else
-                    {
-                        finalGrid = ocrList.stream()
-                                .filter(x -> x.y > 180).collect(Collectors.toList());
-                    }
-                }
-                return finalGrid;
-            }
-            catch (Exception e)
-            {
-                delay(5000);
-                continue;
-            }
-        }
     }
 
     /**
@@ -4316,14 +4082,14 @@ public class StartAuto extends HSQService
         try
         {
             // Tìm các node có class Check/Radio hoặc có thuộc tính checkable="true"
-            Pattern pattern = Pattern.compile("<node.*?class=\"([^\"]*?)\".*?checkable=\"true\".*?bounds=\"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]\"");
+            Pattern pattern = Pattern.compile("<node.*?class=\"([^\"]*?)\".*?checkable=\"true\".*?bounds=\"\\[(\\d+),(\\d+)]\\[(\\d+),(\\d+)]\"");
             Matcher matcher = pattern.matcher(xml);
             while (matcher.find())
             {
-                int left = Integer.parseInt(matcher.group(2));
-                int top = Integer.parseInt(matcher.group(3));
-                int right = Integer.parseInt(matcher.group(4));
-                int bottom = Integer.parseInt(matcher.group(5));
+                int left = Integer.parseInt(Objects.requireNonNull(matcher.group(2)));
+                int top = Integer.parseInt(Objects.requireNonNull(matcher.group(3)));
+                int right = Integer.parseInt(Objects.requireNonNull(matcher.group(4)));
+                int bottom = Integer.parseInt(Objects.requireNonNull(matcher.group(5)));
                 if (top > minTop && top < 2900)
                 {
                     list.add(new android.graphics.Rect(left, top, right, bottom));
@@ -4342,7 +4108,7 @@ public class StartAuto extends HSQService
         try
         {
             // Tìm các thẻ có clickable hoặc focusable để lấy ra các thẻ ảnh cỡ bự
-            Pattern pattern = Pattern.compile("<node[^>]*?(?:clickable=\"true\"|focusable=\"true\")[^>]*?bounds=\"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]\"");
+            Pattern pattern = Pattern.compile("<node[^>]*?(?:clickable=\"true\"|focusable=\"true\")[^>]*?bounds=\"\\[(\\d+),(\\d+)]\\[(\\d+),(\\d+)]\"");
             Matcher matcher = pattern.matcher(xml);
             while (matcher.find())
             {
@@ -4403,8 +4169,35 @@ public class StartAuto extends HSQService
                 HSQTools.captureAndSaveScreen(imagePath + "/screenCap.png");
                 delay(2000);
                 HSQTools.ScanImage(imagePath);
+
+                // CHUYỂN ĐỔI PHONESCREEN SANG MẢNG JSON
+                org.json.JSONArray jsonArray = new org.json.JSONArray();
+                org.json.JSONObject currentScreen = new org.json.JSONObject();
+                org.json.JSONArray currentBlocks = new org.json.JSONArray();
+                int screenIndex = 1;
+                for (HSQTools.TextBlock tb : phoneScreen) {
+                    if (tb.text.equals("Đã vuốt xuống")) {
+                        try {
+                            currentScreen.put("screen_index", screenIndex++);
+                            currentScreen.put("blocks", currentBlocks);
+                            jsonArray.put(currentScreen);
+                        } catch(Exception ignored){}
+                        currentScreen = new org.json.JSONObject();
+                        currentBlocks = new org.json.JSONArray();
+                    } else {
+                        try {
+                            org.json.JSONObject b = new org.json.JSONObject();
+                            b.put("text", tb.text);
+                            b.put("x", tb.x);
+                            b.put("y", tb.y);
+                            currentBlocks.put(b);
+                        } catch(Exception ignored){}
+                    }
+                }
+                String jsonContent = jsonArray.toString();
+
                 // GỬI BÁO CÁO VIP LÊN TELEGRAM
-                HSQTools.sendTelegramAlertVIP(deviceID, "LỖI LỲ LỢM [" + actionType.toUpperCase() + "]: " + stepDetail, idTelegram, imagePath + "/screenCap.png", currentXml);
+                HSQTools.sendTelegramAlertVIP(deviceID, "LỖI LỲ LỢM [" + actionType.toUpperCase() + "]: " + stepDetail, idTelegram, imagePath + "/screenCap.png", currentXml, jsonContent);
                 delay(2000);
                 updateContent("Kẹt " + actionType);
                 delay(5000);
@@ -4496,57 +4289,6 @@ public class StartAuto extends HSQService
             }
         }
     }
-
-    // =======================================================
-    // THUẬT TOÁN GOM CỤM THÔNG MINH (PHIÊN BẢN CHỐNG CHIA CỘT)
-    // =======================================================
-    private List<HSQTools.TextBlock> clusterTextBlocks(List<HSQTools.TextBlock> originalList)
-    {
-        List<HSQTools.TextBlock> clusteredList = new ArrayList<>();
-        if (originalList == null || originalList.isEmpty()) return clusteredList;
-
-        // 1. Sort theo Y từ trên xuống dưới
-        java.util.Collections.sort(
-                originalList, new java.util.Comparator<HSQTools.TextBlock>()
-                {
-                    @Override
-                    public int compare(HSQTools.TextBlock b1, HSQTools.TextBlock b2)
-                    {
-                        return Integer.compare(b1.y, b2.y);
-                    }
-                }
-        );
-
-        List<HSQTools.TextBlock> currentLine = new ArrayList<>();
-        currentLine.add(originalList.get(0));
-
-        // 🌟 Sai số Y để nhận diện cùng 1 hàng (Nới lỏng lên 45px để ăn trọn các bảng Web bị lệch)
-        int yTolerance = 45;
-
-        for (int i = 1; i < originalList.size(); i++)
-        {
-            HSQTools.TextBlock currentBlock = originalList.get(i);
-            HSQTools.TextBlock firstBlockInLine = currentLine.get(0);
-
-            if (Math.abs(currentBlock.y - firstBlockInLine.y) <= yTolerance)
-            {
-                currentLine.add(currentBlock);
-            }
-            else
-            {
-                clusteredList.add(mergeLineBlocks(currentLine));
-                currentLine.clear();
-                currentLine.add(currentBlock);
-            }
-        }
-        if (!currentLine.isEmpty())
-        {
-            clusteredList.add(mergeLineBlocks(currentLine));
-        }
-
-        return clusteredList;
-    }
-
     private HSQTools.TextBlock mergeLineBlocks(List<HSQTools.TextBlock> lineBlocks)
     {
         if (lineBlocks.size() == 1)
@@ -4557,16 +4299,7 @@ public class StartAuto extends HSQService
         }
 
         // Sort theo X từ Trái sang Phải
-        java.util.Collections.sort(
-                lineBlocks, new java.util.Comparator<HSQTools.TextBlock>()
-                {
-                    @Override
-                    public int compare(HSQTools.TextBlock b1, HSQTools.TextBlock b2)
-                    {
-                        return Integer.compare(b1.x, b2.x);
-                    }
-                }
-        );
+        lineBlocks.sort((b1, b2) -> Integer.compare(b1.x, b2.x));
 
         StringBuilder combinedText = new StringBuilder();
         int sumX = 0, sumY = 0;
@@ -4616,7 +4349,7 @@ public class StartAuto extends HSQService
                 }
             }
 
-            if (validRadios.size() >= 1) {
+            if (!validRadios.isEmpty()) {
                 // Loại bỏ trùng lặp: Android thường xếp chồng nhiều View (Checkbox, ImageView, FrameLayout) lên cùng 1 tọa độ
                 List<Integer> uniqueCenters = new ArrayList<>();
                 for (org.w3c.dom.Element node : validRadios) {
@@ -4685,6 +4418,8 @@ public class StartAuto extends HSQService
                 // Lấy toàn bộ TextBlock trên màn hình (Đã lọc theo clickToTextMinY để khỏi chọt trùng)
                 List<TextBlock> checkAnswer = getCheckAnswerSmart().stream()
                         .filter(x -> x.y > 180 && x.y < 2900 && x.y > clickToTextMinY).collect(Collectors.toList());
+                phoneScreen.addAll(checkAnswer);
+                phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
                 while (true)
                 {
                     // Logic chống kẹt màn hình
@@ -4810,18 +4545,87 @@ public class StartAuto extends HSQService
         return null;
     }
 
+    private boolean shouldBlockClickButtonOnUnfinishedPicker(List<TextBlock> visibleBlocks)
+    {
+        try
+        {
+            int yearOptionCount = 0;
+            boolean hasDobPlaceholder = false;
+
+            if (visibleBlocks != null)
+            {
+                for (TextBlock block : visibleBlocks)
+                {
+                    if (block == null || block.text == null) continue;
+                    String raw = block.text.trim();
+                    if (raw.contains("--MM--") || raw.contains("--DD--") || raw.contains("--YY--") || raw.contains("--YYYY--"))
+                    {
+                        hasDobPlaceholder = true;
+                    }
+
+                    if (raw.matches("^(19|20)\\d{2}$"))
+                    {
+                        yearOptionCount++;
+                    }
+                }
+            }
+
+            if (hasDobPlaceholder || yearOptionCount >= 5) return true;
+
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.isEmpty()) return false;
+            if (xml.contains("--MM--") || xml.contains("--DD--") || xml.contains("--YY--") || xml.contains("--YYYY--")) return true;
+
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            int radioLikeCount = 0;
+            int xmlYearCount = 0;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.centerY() <= 180 || r.centerY() >= heightOfScreen - 50) continue;
+
+                String clazz = node.getAttribute("class");
+                String rawText = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+
+                if (clazz.contains("RadioButton") || "true".equals(node.getAttribute("checkable")))
+                {
+                    radioLikeCount++;
+                }
+                if (rawText.matches(".*\\b(19|20)\\d{2}\\b.*"))
+                {
+                    xmlYearCount++;
+                }
+            }
+
+            return radioLikeCount >= 5 && xmlYearCount >= 5;
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+    }
+
     private List<TextBlock> clickButton(String step)
     {
         int slVuot = 0;
+        String currentXml = "";
+
         Matcher matchBtn = java.util.regex.Pattern.compile("\\{([^{}]+)\\}").matcher(step);
         String rawTarget = matchBtn.find() ? matchBtn.group(1).trim() : "";
 
-        boolean isArrow = rawTarget.contains(">") || rawTarget.contains("->") || rawTarget.contains("→");
-        final String targetNorm = isArrow ? rawTarget : HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawTarget));
+        boolean isArrow = rawTarget.contains(">") || rawTarget.contains("->") || rawTarget.contains("â†’");
+        final String cleanTargetNorm = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawTarget));
+        final String targetNorm = isArrow ? rawTarget : cleanTargetNorm;
+        final boolean isCardNextTarget = cleanTargetNorm.matches("^(nextthe|nextcard|cardnext|chuyenthe|chuyenthetheo|thetieptheo|tiepthenay|thesau|muitenthe|arrowcard|nextattribute|attribute_next)$");
+        final boolean isPageNextTarget = cleanTargetNorm.matches("^(nextpage|pagenext|chuyentrang|trangtieptheo|tieptheotrang|submitpage|submitform|hoanthanhtrang)$");
 
-        // 🌟 ĐỘC CHIÊU CỦA SẾP: GỘP CHUNG Ý NIỆM "ĐI TIẾP"
-        // Dù AI có hô "tieptuc", "next", hay ">", thì ý định cuối cùng vẫn là bấm nút Next!
-        final boolean isNextIntent = isArrow || targetNorm.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|batdau|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep|batdau|muiten|arrow|tien|tienlen)$");
+        // Phan biet next the va next page. Dau > tu AI chi la tin hieu mo ho, code van phai doc context man hinh.
+        final boolean isNextIntent = isArrow || isCardNextTarget || isPageNextTarget || cleanTargetNorm.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep|batdau|muiten|arrow|tien|tienlen)$");
         checkButtonAgainLoop:
         while (true)
         {
@@ -4831,15 +4635,24 @@ public class StartAuto extends HSQService
             while (true)
             {
                 // TẦNG 1: HÌNH ẢNH
+                List<HSQTools.TextBlock> smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                phoneScreen.addAll(smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+                phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
+                if (isNextIntent && shouldBlockClickButtonOnUnfinishedPicker(smartList))
+                {
+                    updateNotificationContent("Chan clickbutton: dropdown/DOB chua hoan tat");
+                    List<TextBlock> blockedScreen = smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                    blockedScreen.add(new TextBlock("BLOCKED_CLICKBUTTON_DROPDOWN_OR_DOB_PLACEHOLDER", 0, 0));
+                    return blockedScreen;
+                }
+
                 if (HSQTools.getImageExistss(
                         2, true, R.drawable.btr_nextser_niq, R.drawable.btr_nextser_es, R.drawable.btr_nextser,
-                        R.drawable.btr_next_ifm, R.drawable.btr_next_niq1
-                ) != 0)
+                        R.drawable.btr_next_ifm) != 0)
                 {
                     break checkButtonAgainLoop;
                 }
 
-                List<HSQTools.TextBlock> smartList = getCheckAnswerSmart();
 
                 // 🌟 TẦNG 2.1: SĂN NÚT ẢNH TRỐNG (ĐÃ BỌC THÉP Ý NIỆM NEXT)
                 // Kể cả AI hô "tieptuc", vẫn cho phép quét tìm nút mũi tên trống ở nửa dưới màn hình!
@@ -4847,10 +4660,10 @@ public class StartAuto extends HSQService
                 {
                     try
                     {
-                        String xmlForArrow = HSQTools.getFlexibleXML();
+                        currentXml = HSQTools.getFlexibleXML();
                         javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
                         javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
-                        org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xmlForArrow.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                        org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(currentXml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                         org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
 
                         android.graphics.Rect bestBlankBtn = null;
@@ -4928,6 +4741,10 @@ public class StartAuto extends HSQService
                 }
 
                 // 🌟 TẦNG 2.2: LƯỚI QUÉT TIÊU CHUẨN (MẮT THẦN OCR)
+                if (isNextIntent && !isPageNextTarget && tryClickWebSurveyVisualArrowFallback(step, smartList, slVuot))
+                {
+                    break checkButtonAgainLoop;
+                }
                 HSQTools.TextBlock btnSmart = smartList.stream()
                         .filter(x -> x.y > 180)
                         .filter(x ->
@@ -4941,9 +4758,17 @@ public class StartAuto extends HSQService
                             // 1. ĐỒNG HÓA KÝ TỰ MŨI TÊN
                             if (isNextIntent)
                             {
+                                // CHỐT CHẶN 1: Từ chối các Text trích dẫn nằm trong đoạn văn (Ví dụ: 'Tiếp theo', "Next")
+                                if (rawText.contains("'") || rawText.contains("\"") || rawText.contains("‘") || rawText.contains("’"))
+                                    return false;
+                                
+                                // CHỐT CHẶN 2: Nút Next hiếm khi nằm ở 20% trên cùng của màn hình (thường là text hướng dẫn)
+                                if (x.y < heightOfScreen * 0.2)
+                                    return false;
+
                                 if (rawText.equals(">") || rawText.equals(">>") || rawText.equals("->") || rawText.equals("=>") || rawText.contains("→"))
                                     return true;
-                                if (cleanText.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|batdau|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep)$"))
+                                if (cleanText.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|batdau|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep|dongyvabatdau|dongy)$"))
                                     return true;
                             }
 
@@ -4963,8 +4788,7 @@ public class StartAuto extends HSQService
                                     if (cleanText.length() >= 3 && targetNorm.contains(cleanText))
                                         return true;
                                     int maxDist = targetNorm.length() <= 3 ? 0 : (targetNorm.length() <= 5 ? 1 : Math.max(2, (int)(targetNorm.length() * 0.3)));
-                                    if (HSQTools.levenshtein(cleanText, targetNorm) <= maxDist)
-                                        return true;
+                                    return HSQTools.levenshtein(cleanText, targetNorm) <= maxDist;
                                 }
                             }
                             return false;
@@ -4977,9 +4801,19 @@ public class StartAuto extends HSQService
 
                 if (btnSmart != null)
                 {
+                    int finalX = btnSmart.x;
+                    // BỌC THÉP OCR GỘP CHỮ: Nếu nó gộp "BACK NEXT" thì X center sẽ bị lệch sang trái (rơi vào nút BACK).
+                    // Chữa cháy: Dời tọa độ X sang bên phải (75% màn hình) để chắc chắn ăn vào nút NEXT.
+                    if (isNextIntent) {
+                        String cleanTest = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(btnSmart.text));
+                        if (cleanTest.contains("back") && btnSmart.x < widthOfScreen / 2) {
+                            finalX = (int) (widthOfScreen * 0.75);
+                        }
+                    }
+
                     updateNotificationContent("Đồng hóa Next: OCR chốt nút [" + btnSmart.text + "] tại Y=" + btnSmart.y);
                     smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
-                    click(btnSmart.x, btnSmart.y, false);
+                    click(finalX, btnSmart.y, false);
                     if (!checkNextOK(smartList, step))
                     {
                         swipeToTop(slVuot, false);
@@ -4988,7 +4822,7 @@ public class StartAuto extends HSQService
                 }
 
                 // 🌟 TẦNG 3: TRUY QUÉT BẰNG XML (ĐÃ BỌC THÉP CHO IMAGE CARD TRONG WEBVIEW)
-                String currentXml = HSQTools.getFlexibleXML();
+                currentXml = HSQTools.getFlexibleXML();
                 try
                 {
                     javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
@@ -5014,13 +4848,19 @@ public class StartAuto extends HSQService
                         // 1. Áp dụng đồng hóa cho XML
                         if (isNextIntent)
                         {
-                            if (rawFullText.contains(">") || rawFullText.contains(">>") || rawFullText.contains("->") || rawFullText.toLowerCase().contains("arrow_right") || rawFullText.toLowerCase().contains("arrowright"))
-                                isMatch = true;
-                            if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|batdau|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep|batdau|arrowright)$"))
-                                isMatch = true;
-                            // Tóm sống cái nút chuyển thẻ của bọn GfK/NIQ
-                            if (resId.toLowerCase().contains("next") || resId.toLowerCase().contains("continue") || resId.toLowerCase().contains("btn_forward") || resId.toLowerCase().contains("navright"))
-                                isMatch = true;
+                            android.graphics.Rect rCheck = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                            boolean isInvalidTopText = rCheck != null && rCheck.centerY() < heightOfScreen * 0.2;
+                            boolean isQuotedText = rawFullText.contains("'") || rawFullText.contains("\"") || rawFullText.contains("‘") || rawFullText.contains("’");
+
+                            if (!isInvalidTopText && !isQuotedText) {
+                                if (rawFullText.contains(">") || rawFullText.contains(">>") || rawFullText.contains("->") || rawFullText.toLowerCase().contains("arrow_right") || rawFullText.toLowerCase().contains("arrowright"))
+                                    isMatch = true;
+                                if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|batdau|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep|arrowright)$"))
+                                    isMatch = true;
+                                // Tóm sống cái nút chuyển thẻ của bọn GfK/NIQ
+                                if (resId.toLowerCase().contains("next") || resId.toLowerCase().contains("continue") || resId.toLowerCase().contains("btn_forward") || resId.toLowerCase().contains("navright"))
+                                    isMatch = true;
+                            }
                         }
 
                         // 2. Khớp theo AI tùy chỉnh
@@ -5136,9 +4976,9 @@ public class StartAuto extends HSQService
 
                         // Bổ sung: quét XML tìm thêm các node clickable TRỐNG TEXT (nút icon)
                         try {
-                            String somXml = HSQTools.getFlexibleXML();
+                            currentXml = HSQTools.getFlexibleXML();
                             javax.xml.parsers.DocumentBuilder somBuilder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
-                            org.w3c.dom.Document somDoc = somBuilder.parse(new java.io.ByteArrayInputStream(somXml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                            org.w3c.dom.Document somDoc = somBuilder.parse(new java.io.ByteArrayInputStream(currentXml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                             org.w3c.dom.NodeList somNodes = somDoc.getElementsByTagName("node");
 
                             for (int i = 0; i < somNodes.getLength(); i++) {
@@ -5175,25 +5015,40 @@ public class StartAuto extends HSQService
 
                                 String promptToGPT = "Tao đang tìm nút để chuyển trang (Ví dụ: Tiếp tục, Next, Continue, >>, Submit, Gửi, mũi tên...). " +
                                         "Trên ảnh tao đã đánh số màu đỏ. Mày hãy chọn đúng 1 con số đại diện cho cái nút đó. " +
-                                        "🔥 LUẬT SINH TỬ: NẾU TRÊN ẢNH ĐÉO CÓ NÚT NEXT NÀO, BẮT BUỘC MÀY PHẢI TRẢ VỀ SỐ 0. " +
-                                        "CHỈ IN RA ĐÚNG 1 CON SỐ DUY NHẤT, CẤM GIẢI THÍCH. " +
-                                        "TRẢ VỀ THEO CÚ PHÁP: begin|som_chot|step1 click_som {số};|end";
+                                        "LUẬT SINH TỬ 1: CẤM ĐƯỢC CHỌN VÀO CÁC CHỮ NHƯ 'Next', 'Tiếp theo' NẰM BÊN TRONG MỘT ĐOẠN VĂN BẢN/CÂU HƯỚNG DẪN DÀI. HÃY TÌM NÚT BẤM (BUTTON/ICON) THẬT SỰ HOẶC BIỂU TƯỢNG MŨI TÊN (>) ĐỂ CHUYỂN TRANG. " +
+                                        "LUẬT SINH TỬ 2: NẾU TRÊN ẢNH ĐÉO CÓ SỐ NÀO TRÊN NÚT NEXT THẬT SỰ, MÀY PHẢI TRẢ VỀ TỌA ĐỘ CỦA NÚT ĐÓ BẰNG CÚ PHÁP: begin|som_chot|step1 click_point {X,Y};|end (với X,Y là tọa độ pixel, chiều ngang ảnh là 1440, dọc 3040). " +
+                                        "NẾU CÓ SỐ NẰM TRÊN NÚT NEXT THẬT SỰ, HÃY TRẢ VỀ CÚ PHÁP LÀ: begin|som_chot|step1 click_som {số};|end . " +
+                                        "NẾU CẢ MÀN HÌNH ĐÉO CÓ BẤT CỨ NÚT NEXT/MŨI TÊN NÀO ĐỂ BẤM (HOẶC CHỈ CÓ TEXT TRONG ĐOẠN VĂN), TRẢ VỀ SỐ 0. " +
+                                        "CHỈ IN RA ĐÚNG 1 LỆNH DUY NHẤT, CẤM GIẢI THÍCH.";
 
                                 String gptResponse = getAnswerFromGemByApi(1, false, false, promptToGPT);
 
                                 int aiChoice = -1;
+                                android.graphics.Point rawPoint = null;
                                 try {
                                     java.util.regex.Matcher m = java.util.regex.Pattern.compile("click_som\\s*\\{([0-9]+)\\}").matcher(gptResponse);
                                     if (m.find()) {
                                         aiChoice = Integer.parseInt(m.group(1).trim());
                                     } else {
-                                        // Fallback: thử bóc số thuần
-                                        java.util.regex.Matcher numM = java.util.regex.Pattern.compile("\\d+").matcher(gptResponse);
-                                        if (numM.find()) aiChoice = Integer.parseInt(numM.group().trim());
+                                        java.util.regex.Matcher m2 = java.util.regex.Pattern.compile("click_point\\s*\\{([0-9]+)\\s*,\\s*([0-9]+)\\}").matcher(gptResponse);
+                                        if (m2.find()) {
+                                            rawPoint = new android.graphics.Point(Integer.parseInt(m2.group(1).trim()), Integer.parseInt(m2.group(2).trim()));
+                                        } else {
+                                            // Fallback: thử bóc số thuần
+                                            java.util.regex.Matcher numM = java.util.regex.Pattern.compile("\\d+").matcher(gptResponse);
+                                            if (numM.find()) aiChoice = Integer.parseInt(numM.group().trim());
+                                        }
                                     }
                                 } catch (Exception ignored) {}
 
-                                if (aiChoice > 0 && somMap.containsKey(aiChoice)) {
+                                if (rawPoint != null) {
+                                    updateNotificationContent("SoM ClickBtn: AI dùng tọa độ gốc X=" + rawPoint.x + ", Y=" + rawPoint.y);
+                                    click(rawPoint.x, rawPoint.y, false);
+                                    if (!checkNextOK(currentVisible, step)) {
+                                        swipeToTop(slVuot, false);
+                                    }
+                                    break checkButtonAgainLoop;
+                                } else if (aiChoice > 0 && somMap.containsKey(aiChoice)) {
                                     android.graphics.Point target = somMap.get(aiChoice);
                                     updateNotificationContent("SoM ClickBtn: AI chốt #" + aiChoice + " tại X=" + target.x + ", Y=" + target.y);
                                     click(target.x, target.y, false);
@@ -5227,6 +5082,208 @@ public class StartAuto extends HSQService
         return null;
     }
 
+    private boolean tryClickWebSurveyVisualArrowFallback(String step, List<HSQTools.TextBlock> smartList, int slVuot)
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return false;
+
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            boolean hasRightArrowInstruction = false;
+            android.graphics.Rect selectedChipRect = null;
+            android.graphics.Rect firstCardRect = null;
+            android.graphics.Rect navControlsRect = null;
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String resId = node.getAttribute("resource-id");
+                String clazz = node.getAttribute("class");
+                String text = node.getAttribute("text");
+                String clickable = node.getAttribute("clickable");
+                String selected = node.getAttribute("selected");
+                String checkable = node.getAttribute("checkable");
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null) continue;
+
+                String resLower = resId == null ? "" : resId.toLowerCase();
+                if (resLower.contains("nav-controls"))
+                {
+                    navControlsRect = r;
+                }
+
+                if (resLower.contains("question"))
+                {
+                    String question = text == null ? "" : text;
+                    String cleanQuestion = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(question));
+                    if (question.contains(">") || question.contains("&gt;") || cleanQuestion.contains("benphaidetieptuc"))
+                    {
+                        hasRightArrowInstruction = true;
+                    }
+                }
+
+                if ("true".equals(clickable)
+                        && "true".equals(selected)
+                        && r.centerY() > 300
+                        && r.centerY() < heightOfScreen - 500
+                        && r.height() >= 40
+                        && r.height() <= 180
+                        && r.width() <= Math.max(220, widthOfScreen / 5))
+                {
+                    if (selectedChipRect == null || r.centerY() > selectedChipRect.centerY())
+                    {
+                        selectedChipRect = r;
+                    }
+                }
+
+                if ("true".equals(checkable)
+                        && clazz.contains("CheckBox")
+                        && r.width() > widthOfScreen * 0.25
+                        && r.height() > 140
+                        && r.top > 300
+                        && r.top < heightOfScreen - 40)
+                {
+                    if (firstCardRect == null || r.top < firstCardRect.top)
+                    {
+                        firstCardRect = r;
+                    }
+                }
+            }
+
+            if (!hasRightArrowInstruction) return false;
+
+            int clickX;
+            int clickY;
+            int visualTop;
+            int visualBottom;
+
+            if (navControlsRect != null && navControlsRect.width() > widthOfScreen * 0.4 && navControlsRect.height() > 30)
+            {
+                clickX = Math.min(navControlsRect.right - 35, (int) (widthOfScreen * 0.94));
+                clickY = navControlsRect.centerY();
+                visualTop = navControlsRect.top;
+                visualBottom = navControlsRect.bottom;
+            }
+            else if (selectedChipRect != null && firstCardRect != null)
+            {
+                int gapTop = selectedChipRect.bottom;
+                int gapBottom = firstCardRect.top;
+                int gap = gapBottom - gapTop;
+                if (gap < 80 || gap > 420) return false;
+
+                clickX = Math.min(widthOfScreen - 90, (int) (widthOfScreen * 0.93));
+                clickY = gapTop + (gap / 2);
+                visualTop = gapTop;
+                visualBottom = gapBottom;
+            }
+            else
+            {
+                return false;
+            }
+
+            if (clickX <= widthOfScreen / 2 || clickY <= 180 || clickY >= heightOfScreen - 80) return false;
+
+            android.graphics.Point visualChevron = findBrightRightChevronPoint(visualTop, visualBottom);
+            if (visualChevron != null)
+            {
+                clickX = visualChevron.x;
+                clickY = visualChevron.y;
+                updateNotificationContent("Dong hoa Next the: bitmap thay mui ten tai " + clickX + "," + clickY);
+            }
+            else
+            {
+                updateNotificationContent("Dong hoa Next the: fallback layout tai " + clickX + "," + clickY);
+            }
+
+            List<HSQTools.TextBlock> beforeClick = smartList == null
+                    ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
+                    : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
+            click(clickX, clickY, false);
+            if (!checkNextOK(beforeClick, step))
+            {
+                swipeToTop(slVuot, false);
+            }
+            return true;
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+    }
+    private android.graphics.Point findBrightRightChevronPoint(int top, int bottom)
+    {
+        try
+        {
+            android.graphics.Bitmap bitmap = HSQTools.getScreenBitmap();
+            if (bitmap == null) return null;
+
+            int w = bitmap.getWidth();
+            int h = bitmap.getHeight();
+            int scanLeft = Math.max((int) (w * 0.78), 0);
+            int scanRight = Math.min(w - 8, Math.max(scanLeft + 1, w - 20));
+            int scanTop = Math.max(180, Math.min(top, bottom));
+            int scanBottom = Math.min(h - 80, Math.max(top, bottom));
+            if (scanBottom - scanTop < 35) return null;
+
+            long sumX = 0;
+            long sumY = 0;
+            int count = 0;
+            int minX = w;
+            int maxX = 0;
+            int minY = h;
+            int maxY = 0;
+
+            for (int y = scanTop; y < scanBottom; y += 2)
+            {
+                for (int x = scanLeft; x < scanRight; x += 2)
+                {
+                    int c = bitmap.getPixel(x, y);
+                    int r = (c >> 16) & 0xff;
+                    int g = (c >> 8) & 0xff;
+                    int b = c & 0xff;
+                    int lum = (r * 299 + g * 587 + b * 114) / 1000;
+                    int max = Math.max(r, Math.max(g, b));
+                    int min = Math.min(r, Math.min(g, b));
+
+                    if (lum < 210 || max < 225) continue;
+                    if (max - min > 90) continue;
+
+                    int bgX = Math.max(0, x - 18);
+                    int bg = bitmap.getPixel(bgX, y);
+                    int br = (bg >> 16) & 0xff;
+                    int bgc = (bg >> 8) & 0xff;
+                    int bb = bg & 0xff;
+                    int bgLum = (br * 299 + bgc * 587 + bb * 114) / 1000;
+                    if (lum - bgLum < 18 && x < w * 0.88) continue;
+
+                    sumX += x;
+                    sumY += y;
+                    count++;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+
+            if (count < 35) return null;
+            if (maxX - minX < 12 || maxY - minY < 20) return null;
+
+            int cx = (int) (sumX / count);
+            int cy = (int) (sumY / count);
+            if (cx <= w / 2 || cy <= 180 || cy >= h - 80) return null;
+            return new android.graphics.Point(cx, cy);
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
     private List<TextBlock> clickDropDown(String contextStr)
     {
         int vuotTimKiem = 0;
@@ -5234,6 +5291,8 @@ public class StartAuto extends HSQService
         int daVuotLen = 0;
         String xml = "";
         List<TextBlock> currentScreen = getCheckAnswerSmart();
+        phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+        phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
 
         class XmlNodeTemp
         {
@@ -5263,7 +5322,6 @@ public class StartAuto extends HSQService
             }
         }
 
-        checkDropdownActionLoop:
         while (true)
         {
             String normTarget = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(contextStr));
@@ -5288,13 +5346,11 @@ public class StartAuto extends HSQService
                         }
 
                         return HSQTools.levenshtein(cleanText, normTarget) <= Math.max(1, (int) (normTarget.length() * 0.2));
-                    })
-                    .sorted(Comparator.comparingInt((HSQTools.TextBlock x) ->
+                    }).min(Comparator.comparingInt((TextBlock x) ->
                     {
                         String cleanText = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(x.text));
                         return cleanText.equals(normTarget) ? 0 : 1;
                     }).thenComparingInt(x -> Math.abs(x.text.length() - contextStr.length())))
-                    .findFirst()
                     .orElse(null);
 
             if (exactTextNode == null)
@@ -5304,8 +5360,10 @@ public class StartAuto extends HSQService
                     swipe(xCenter, yBot, xCenter, yTop, 2000);
                     delay(2000);
                     currentScreen = getCheckAnswerSmart();
+                    phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+                    phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
                     vuotLenLai++;
-                    continue checkDropdownActionLoop;
+                    continue;
                 }
                 return currentScreen;
             }
@@ -5316,8 +5374,10 @@ public class StartAuto extends HSQService
                 swipe(xCenter, yBot, xCenter, yBot - 600, 1000);
                 delay(2000);
                 currentScreen = getCheckAnswerSmart();
+                phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+                phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
                 daVuotLen++;
-                continue checkDropdownActionLoop;
+                continue;
             }
 
             List<android.graphics.Point> candidates = new ArrayList<>();
@@ -5720,7 +5780,6 @@ public class StartAuto extends HSQService
                 }
 
                 currentScreen = getCheckAnswerSmart();
-                continue checkDropdownActionLoop;
             }
             else if (vuotTimKiem == 1)
             {
@@ -5734,7 +5793,6 @@ public class StartAuto extends HSQService
                 }
 
                 currentScreen = getCheckAnswerSmart();
-                continue checkDropdownActionLoop;
             }
         }
     }
@@ -5765,6 +5823,8 @@ public class StartAuto extends HSQService
             while (true)
             {
                 currentScreen = getCheckAnswerSmart();
+                phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+                phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
                 List<TextBlock> visibleHeader = currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList());
                 android.graphics.Point hPt = HSQTools.smartFindTextPoint(headerStr, heightOfScreen);
 
@@ -5801,6 +5861,8 @@ public class StartAuto extends HSQService
                     swipe(safeSwipeX, (int) (heightOfScreen * 0.8), safeSwipeX, (int) (heightOfScreen * 0.4), 2000);
                     delay(2500);
                     currentScreen = getCheckAnswerSmart();
+                    phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+                    phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
                     hPt = HSQTools.smartFindTextPoint(headerStr, heightOfScreen);
                     if (hPt == null)
                     {
@@ -5843,6 +5905,8 @@ public class StartAuto extends HSQService
                 while (!isAlreadyOpen)
                 {
                     currentScreen = getCheckAnswerSmart();
+                    phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+                    phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
 
                     android.graphics.Point currentHeaderPt = HSQTools.smartFindTextPoint(headerStr, heightOfScreen);
                     if (currentHeaderPt == null) return currentScreen;
@@ -5920,10 +5984,11 @@ public class StartAuto extends HSQService
                     int vuotTimKiemItem = 0;
                     List<HSQTools.TextBlock> tempCompareItem = new ArrayList<>();
 
-                    itemLoop:
                     while (true)
                     {
                         currentScreen = getCheckAnswerSmart();
+                        phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+                        phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
                         android.graphics.Point currentHeaderPt = HSQTools.smartFindTextPoint(headerStr, heightOfScreen);
 
                         if (currentHeaderPt == null)
@@ -5957,7 +6022,7 @@ public class StartAuto extends HSQService
                             updateNotificationContent("Đã khóa mục tiêu [" + cleanItem + "] tại Y=" + exactPt.y);
                             click(exactPt.x, exactPt.y, false);
                             delay(2000);
-                            break itemLoop;
+                            break;
                         }
 
                         // Vì smartFindTextPoint trả về tọa độ nên ta cần một biến tương đương để check Fallback bên dưới
@@ -6120,7 +6185,7 @@ public class StartAuto extends HSQService
                                     }
                                 }
 
-                                if (clicked) break itemLoop;
+                                if (clicked) break;
                             }
 
                             // =======================================================
@@ -6188,7 +6253,7 @@ public class StartAuto extends HSQService
                                             + "] đến [" + anchorMaxNum + "→Y=" + anchorMaxY + "]. Click #" + targetNum + " tại Y=" + interpolatedY);
                                     click(clickX, interpolatedY, false);
                                     delay(2000);
-                                    break itemLoop;
+                                    break;
                                 }
                             }
                             // Cần ít nhất 2 mốc neo KHÁC NHAU để nội suy
@@ -6219,7 +6284,7 @@ public class StartAuto extends HSQService
                                         + "] đến [" + anchorMaxNum + "→Y=" + anchorMaxY + "]. Click " + targetNum + " tại Y=" + interpolatedY);
                                 click(clickX, interpolatedY, false);
                                 delay(2000);
-                                break itemLoop;
+                                break;
                             }
                         }
 
@@ -6279,6 +6344,8 @@ public class StartAuto extends HSQService
         while (true)
         {
             List<HSQTools.TextBlock> currentScreen = getCheckAnswerSmart();
+            phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+            phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
             int inputX = -1, inputY = -1;
 
             // =========================================================
@@ -6336,7 +6403,7 @@ public class StartAuto extends HSQService
                             android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
 
                             // 🔥 BỌC THÉP HEIGHT > 10: Diệt các mỏ neo ảo bị ghim trên mép màn hình
-                            if (r != null && !combined.isEmpty() && r.height() > 10 && r.height() < 800 && normTarget.length() >= 2)
+                            if (r != null && !combined.isEmpty() && r.height() > 10 && r.height() < (heightOfScreen * 0.8) && normTarget.length() >= 2)
                             {
                                 if (r.centerY() > 100 && r.centerY() < heightOfScreen - 50)
                                 {
@@ -6374,7 +6441,7 @@ public class StartAuto extends HSQService
                                     int domDist = getDomDistance(node, bestLabelNode);
                                     int score = dist + (domDist * 50);
 
-                                    if (score < minXmlDist && dist < 400)
+                                    if (score < minXmlDist && dist < (heightOfScreen * 0.45))
                                     {
                                         minXmlDist = score;
                                         bestXmlInput = r;
@@ -6511,7 +6578,32 @@ public class StartAuto extends HSQService
                         HSQTools.captureAndSaveScreen(imagePath + "/screenCap.png");
                         delay(2000);
                         HSQTools.ScanImage(imagePath);
-                        HSQTools.sendTelegramAlertVIP(deviceID, "Bấm next không ăn " + step, idTelegram, imagePath + "/screenCap.png", currentXml);
+                        // CHUYỂN ĐỔI PHONESCREEN SANG MẢNG JSON
+                        org.json.JSONArray jsonArray = new org.json.JSONArray();
+                        org.json.JSONObject currentScreen = new org.json.JSONObject();
+                        org.json.JSONArray currentBlocks = new org.json.JSONArray();
+                        int screenIndex = 1;
+                        for (HSQTools.TextBlock tb : phoneScreen) {
+                            if (tb.text.equals("Đã vuốt xuống")) {
+                                try {
+                                    currentScreen.put("screen_index", screenIndex++);
+                                    currentScreen.put("blocks", currentBlocks);
+                                    jsonArray.put(currentScreen);
+                                } catch(Exception ignored){}
+                                currentScreen = new org.json.JSONObject();
+                                currentBlocks = new org.json.JSONArray();
+                            } else {
+                                try {
+                                    org.json.JSONObject b = new org.json.JSONObject();
+                                    b.put("text", tb.text);
+                                    b.put("x", tb.x);
+                                    b.put("y", tb.y);
+                                    currentBlocks.put(b);
+                                } catch(Exception ignored){}
+                            }
+                        }
+                        String jsonContent = jsonArray.toString();
+                        HSQTools.sendTelegramAlertVIP(deviceID, "Bấm next không ăn " + step, idTelegram, imagePath + "/screenCap.png", currentXml, jsonContent);
                         show();
                         delay(2000);
                         updateContent("next không ăn");
@@ -6541,80 +6633,7 @@ public class StartAuto extends HSQService
             }
         }
     }
-    private boolean clickInputByVisualGeometry(String anchorText) {
-        // ========================================================
-        // BƯỚC 1: MẮT THẦN TÌM TIÊU ĐỀ (MỎ NEO) BẰNG OCR/SMART
-        // ========================================================
-        List<HSQTools.TextBlock> screen = getCheckAnswerSmart();
-        String normAnchor = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(anchorText));
 
-        HSQTools.TextBlock labelNode = null;
-        for (HSQTools.TextBlock node : screen) {
-            String cleanText = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(node.text));
-            // Lấy thằng nào chứa từ khóa mỏ neo (Từ khóa dài > 2 ký tự cho chắc ăn)
-            if (cleanText.contains(normAnchor) && normAnchor.length() >= 3 && node.y > 180) {
-                labelNode = node;
-                break;
-            }
-        }
-
-        if (labelNode == null) {
-            updateNotificationContent("Visual: Đéo thấy mỏ neo [" + normAnchor + "]");
-            return false;
-        }
-
-        // ========================================================
-        // BƯỚC 2: ASBL VẼ KHUNG TOÀN BỘ CÁC "Ô NHẬP/NÚT" CÓ THỂ BẤM
-        // ========================================================
-        AccessibilityNodeInfo root = ASBLBridgeService.asblService.getRootInActiveWindow();
-        if (root == null) return false;
-
-        java.util.List<AccessibilityNodeInfo> allNodes = new ArrayList<>();
-        HSQTools.getAllNodesRec(root, allNodes);
-
-        android.graphics.Rect bestBox = null;
-        int minDistance = 99999;
-
-        for (AccessibilityNodeInfo node : allNodes) {
-            String clazz = node.getClassName() != null ? node.getClassName().toString() : "";
-
-            // Nhận diện Ô nhập chuẩn HOẶC Hộp Clickable (Dropdown/Radio rỗng)
-            boolean isEditText = clazz.contains("EditText") || clazz.contains("AutoCompleteTextView");
-            boolean isEmptyClickable = node.isClickable() && (node.getText() == null || node.getText().toString().trim().isEmpty());
-
-            if (isEditText || isEmptyClickable) {
-                android.graphics.Rect r = new android.graphics.Rect();
-                node.getBoundsInScreen(r);
-
-                // 🌟 ĐIỀU KIỆN HÌNH HỌC KHÔNG GIAN:
-                // 1. Phải nằm trong Viewport màn hình (chống nút ảo)
-                if (r.centerY() > 180 && r.centerY() < heightOfScreen - 100) {
-
-                    // 2. Khoảng cách: Lấy khoảng cách TUYỆT ĐỐI (Cho phép ô nhập nằm trên hoặc dưới Mỏ neo)
-                    // Vì Label có thể nằm bên dưới tấm ảnh, còn ô nhập nằm ngang tấm ảnh!
-                    int dist = Math.abs(r.centerY() - labelNode.y);
-
-                    // 3. Khóa vùng quét: Chỉ lấy thằng nào cách mỏ neo trong bán kính 500px để chống bắt nhầm
-                    if (dist < minDistance && dist < 500) {
-                        minDistance = dist;
-                        bestBox = r;
-                    }
-                }
-            }
-        }
-        root.recycle();
-
-        // ========================================================
-        // BƯỚC 3: KẾT LIỄU
-        // ========================================================
-        if (bestBox != null) {
-            updateNotificationContent("Visual Geometry: Chốt ô cách mỏ neo " + minDistance + "px tại Y=" + bestBox.centerY());
-            click(bestBox.centerX(), bestBox.centerY(), false);
-            return true; // Bắn tín hiệu Thành Công ra ngoài!
-        }
-
-        return false;
-    }
     private android.graphics.Point findInputByVisualGeometry(String anchorText) {
         List<HSQTools.TextBlock> screen = getCheckAnswerSmart();
         String normAnchor = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(anchorText));
@@ -6670,12 +6689,7 @@ public class StartAuto extends HSQService
         // Ch�ng ta m� qu�ng b?m th?ng xu?ng du?i M? neo (Label) 120px!
         // ========================================================
                 java.util.List<HSQTools.TextBlock> sortedBlocks = new java.util.ArrayList<>(screen);
-        java.util.Collections.sort(sortedBlocks, new java.util.Comparator<HSQTools.TextBlock>() {
-            @Override
-            public int compare(HSQTools.TextBlock t1, HSQTools.TextBlock t2) {
-                return Integer.compare(t1.y, t2.y);
-            }
-        });
+        sortedBlocks.sort(Comparator.comparingInt(t -> t.y));
 
         java.util.List<HSQTools.TextBlock> blocksBelow = new java.util.ArrayList<>();
         for (HSQTools.TextBlock node : sortedBlocks) {
@@ -6731,6 +6745,8 @@ public class StartAuto extends HSQService
         while (true)
         {
             List<HSQTools.TextBlock> currentScreen = getCheckAnswerSmart();
+            phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+            phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
             List<android.graphics.Rect> inputBoxes = new ArrayList<>();
 
             String xml = HSQTools.getFlexibleXML();
@@ -6752,7 +6768,7 @@ public class StartAuto extends HSQService
                     if (!clazz.contains("EditText") && !clazz.contains("Button") && !clazz.contains("WebView")) {
                         String combined = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(node.getAttribute("text") + " " + node.getAttribute("content-desc")));
                         android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
-                        if (r != null && !combined.isEmpty() && r.height() < 800 && normTarget.length() >= 2) {
+                        if (r != null && !combined.isEmpty() && r.height() < (heightOfScreen * 0.8) && normTarget.length() >= 2) {
                             if (combined.equals(normTarget) || combined.contains(normTarget)) {
                                 if (r.height() < minLabelHeight) {
                                     minLabelHeight = r.height();
@@ -6950,13 +6966,15 @@ public class StartAuto extends HSQService
     }
     private List<HSQTools.TextBlock> clickSlider(String labelToFind, int percent)
     {
-        String xml = "";
+        String xml;
         List<HSQTools.TextBlock> tempCompare = new ArrayList<>();
         int vuotLenLai = 0;
 
         while (true)
         {
             List<HSQTools.TextBlock> currentScreen = getCheckAnswerSmart();
+            phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
+            phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
             int clickX = -1, clickY = -1;
             String normTarget = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(labelToFind));
 
@@ -6983,7 +7001,7 @@ public class StartAuto extends HSQService
                             int dist = HSQTools.levenshtein(cleanText, normTarget);
                             int allow = Math.max(1, (int) (Math.min(cleanText.length(), normTarget.length()) * 0.12f));
 
-                            if (lenDiff <= 4 && dist <= allow) return true;
+                            return lenDiff <= 4 && dist <= allow;
                         }
 
                         return false;
@@ -7097,8 +7115,8 @@ public class StartAuto extends HSQService
 
                         // Yêu cầu nhóm phải có ít nhất 3 phần tử (để chắc chắn là 1 hàng scale chứ ko phải nút linh tinh)
                         if (bestGroup != null && bestGroup.size() >= 3) {
-                            int minX = bestGroup.stream().mapToInt(x -> x.centerX()).min().orElse(-1);
-                            int maxX = bestGroup.stream().mapToInt(x -> x.centerX()).max().orElse(-1);
+                            int minX = bestGroup.stream().mapToInt(Rect::centerX).min().orElse(-1);
+                            int maxX = bestGroup.stream().mapToInt(Rect::centerX).max().orElse(-1);
 
                             if (maxX - minX > widthOfScreen * 0.3) {
                                 bestY = bestGroup.get(0).centerY();
@@ -7114,7 +7132,7 @@ public class StartAuto extends HSQService
                     if (bestY == -1) {
                         java.util.List<HSQTools.TextBlock> numbers = currentScreen.stream()
                                 .filter(x -> x.y > exactY && x.y < exactY + (heightOfScreen * 0.65f)) // Nới lỏng khoảng cách Y xuống 65% màn hình
-                                .filter(x -> x.text.matches(".*\\d.*") && x.text.replaceAll("[\\d\\s\\.,\\-]", "").length() < 15) // Bỏ qua nếu là câu văn dài (như tiêu đề chứa số)
+                                .filter(x -> x.text.matches(".*\\d.*") && x.text.replaceAll("[\\d\\s.,\\-]", "").length() < 15) // Bỏ qua nếu là câu văn dài (như tiêu đề chứa số)
                                 .collect(Collectors.toList());
 
                         int maxGroupSize = 0;
@@ -7319,88 +7337,7 @@ public class StartAuto extends HSQService
         rawScreen.recycle();
         return mutableBitmap;
     }
-    private void tryClickButtonVip(String step) {
-        // Giả định sếp đặt trong vòng lặp checkButtonAgainLoop
-        int vuotLenLai = 0;
 
-        while (true) {
-            // 1. Quét nửa dưới màn hình để lấy mỏ neo
-            List<HSQTools.TextBlock> suspectNodes = getCheckAnswerSmart().stream()
-                    .filter(x -> x.y > 180 && x.y < heightOfScreen - 50)
-                    .collect(Collectors.toList());
-
-            if (!suspectNodes.isEmpty()) {
-
-                // 2. TỰ TAY VẼ BÙA VÀ LƯU RA FILE
-                android.graphics.Bitmap markedImage = generateSoMImage(suspectNodes);
-                if (markedImage != null) {
-                    // Xóa sạch thư mục cũ đi
-                    HSQFileHelper.deleteFile(imagePath);
-                    HSQFileHelper.createFolder(imagePath);
-                    delay(500);
-
-                    // Lưu file đã vẽ bùa vào đúng vị trí mà hàm API chuẩn bị đọc
-                    String somFilePath = imagePath + "/screenCapa1.png";
-                    saveBitmapToFile(markedImage, somFilePath);
-                    markedImage.recycle(); // Dọn rác
-                    delay(1000);
-
-                    // 3. GỌI API (BỌC THÉP LUẬT SỐ 0)
-                    String promptToGPT = "Tao đang tìm nút để chuyển trang (Ví dụ: Tiếp tục, Next, >>...). " +
-                            "Trên ảnh tao đã đánh số màu đỏ. Mày hãy chọn đúng 1 con số đại diện cho cái nút đó. " +
-                            "🔥 LUẬT SINH TỬ: NẾU TRÊN ẢNH ĐÉO CÓ NÚT NEXT NÀO, BẮT BUỘC MÀY PHẢI TRẢ VỀ SỐ 0. " +
-                            "CHỈ IN RA ĐÚNG 1 CON SỐ DUY NHẤT, CẤM GIẢI THÍCH (Ví dụ trả về: 5). " +
-                            "ĐỂ PHÙ HỢP VỚI RULE TRẢ LỜI CỦA MÀY, HÃY TRẢ VỀ THEO CÚ PHÁP: begin|som_chot|step1 click_som {số};|end";
-
-                    // 🔥 TRUYỀN PARAM: captureScreen = FALSE (Cấm chụp màn hình)
-                    // Tool sẽ lấy đúng cái ảnh screenCapa1.png vừa lưu ở trên chuyển thành Base64
-                    String gptResponse = getAnswerFromGemByApi(1, false, false, promptToGPT);
-
-                    // Xử lý kết quả trả về: (Sếp nhớ bóc cái chuỗi step1 click_som {5} ra nhé)
-                    int aiChoice = -1;
-                    try {
-                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("click_som\\s*\\{([0-9]+)\\}").matcher(gptResponse);
-                        if (m.find()) {
-                            aiChoice = Integer.parseInt(m.group(1).trim());
-                        }
-                    } catch (Exception e) {}
-
-                    // =========================================================
-                    // 4. XỬ LÝ LỆNH TỪ TRỌNG TÀI AI
-                    // =========================================================
-                    if (aiChoice == 0) {
-                        updateNotificationContent("SoM: AI đéo thấy nút. Đang cuộn màn hình tìm tiếp...");
-                        // AI đéo thấy nút -> Cho vuốt xuống!
-                        if (vuotLenLai == 0) {
-                            swipe(xs, ysBot, xs, ysTop, swipeDuration);
-                        } else {
-                            swipe(xs, ysTop, xs, ysBot, swipeDuration);
-                        }
-                        delay(2500);
-                        continue;
-                    }
-                    else if (aiChoice > 0 && somMap.containsKey(aiChoice)) {
-                        // AI chốt hạ!
-                        android.graphics.Point target = somMap.get(aiChoice);
-                        updateNotificationContent("SoM: AI chốt biển số " + aiChoice + ". Chọt X=" + target.x + ", Y=" + target.y);
-                        click(target.x, target.y, false);
-
-                        // Check qua trang -> Break!
-                        if (!checkNextOK(getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList()), step)) {
-                            // Nếu bấm xịt thì ...
-                        }
-                        return;
-                    }
-                }
-            }
-
-            // Nếu màn hình đéo có nút gì luôn (Ví dụ đang lơ lửng giữa form) -> Bỏ qua AI, vuốt cmn luôn
-            updateNotificationContent("Màn hình trống, vuốt tiếp...");
-            if (vuotLenLai == 0) swipe(xs, ysBot, xs, ysTop, swipeDuration);
-            else swipe(xs, ysTop, xs, ysBot, swipeDuration);
-            delay(2500);
-        }
-    }
     public static void saveBitmapToFile(android.graphics.Bitmap bitmap, String filePath) {
         while(true)
         {
@@ -7994,8 +7931,8 @@ public class StartAuto extends HSQService
         }
 
         list.sort(Comparator
-                .comparingInt((SmartOcrUnit u) -> u.centerY())
-                .thenComparingInt(u -> u.centerX())
+                .comparingInt(SmartOcrUnit::centerY)
+                .thenComparingInt(SmartOcrUnit::centerX)
                 .thenComparingInt(u -> u.level));
 
         return list;
@@ -8081,8 +8018,8 @@ public class StartAuto extends HSQService
         }
 
         result.sort(Comparator
-                .comparingInt((SmartOcrUnit u) -> u.centerY())
-                .thenComparingInt(u -> u.centerX())
+                .comparingInt(SmartOcrUnit::centerY)
+                .thenComparingInt(SmartOcrUnit::centerX)
                 .thenComparingInt(u -> u.level));
 
         return result;
@@ -8094,8 +8031,8 @@ public class StartAuto extends HSQService
 
         List<SmartOcrUnit> ordered = new ArrayList<>(units);
         ordered.sort(Comparator
-                .comparingInt((SmartOcrUnit u) -> u.centerY())
-                .thenComparingInt(u -> u.centerX())
+                .comparingInt(SmartOcrUnit::centerY)
+                .thenComparingInt(SmartOcrUnit::centerX)
                 .thenComparingInt(u -> u.level));
 
         String visualText = composeVisualText(ordered);
@@ -8294,7 +8231,7 @@ public class StartAuto extends HSQService
 
         List<SmartOcrUnit> lines = ocrUnits.stream()
                 .filter(u -> u.level == OCR_LEVEL_LINE)
-                .sorted(Comparator.comparingInt((SmartOcrUnit u) -> u.centerY()).thenComparingInt(u -> u.centerX()))
+                .sorted(Comparator.comparingInt(SmartOcrUnit::centerY).thenComparingInt(SmartOcrUnit::centerX))
                 .collect(Collectors.toList());
 
         for (SmartOcrUnit line : lines)
@@ -8310,7 +8247,7 @@ public class StartAuto extends HSQService
 
         List<SmartOcrUnit> blocks = ocrUnits.stream()
                 .filter(u -> u.level == OCR_LEVEL_BLOCK)
-                .sorted(Comparator.comparingInt((SmartOcrUnit u) -> u.centerY()).thenComparingInt(u -> u.centerX()))
+                .sorted(Comparator.comparingInt(SmartOcrUnit::centerY).thenComparingInt(SmartOcrUnit::centerX))
                 .collect(Collectors.toList());
 
         for (SmartOcrUnit block : blocks)
@@ -8429,7 +8366,7 @@ public class StartAuto extends HSQService
                 android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
 
                 if (r == null || combined.isEmpty() || normTarget.length() < 2) continue;
-                if (r.height() <= 10 || r.height() >= 900) continue;
+                if (r.height() <= 10 || r.height() >= (heightOfScreen * 0.8)) continue;
                 if (r.centerY() <= 180 || r.centerY() >= heightOfScreen - 50) continue;
 
                 boolean labelMatch =

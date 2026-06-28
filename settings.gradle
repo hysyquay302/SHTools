@@ -18,4 +18,13 @@ dependencyResolutionManagement {
 }
 include ':app'
 rootProject.name = "SHTools"
+// Khi co local HSQLibrary canh SHTools, build APK truc tiep voi source moi nhat thay vi dung cache GitHub Packages.
+def localHsqLibrary = file('../HSQLibrary')
+if (localHsqLibrary.exists()) {
+    includeBuild(localHsqLibrary) {
+        dependencySubstitution {
+            substitute module('com.github.hysyquay302:hsq') using project(':HSQ')
+        }
+    }
+}
 include ':OcrLibrary'

@@ -137,13 +137,11 @@ public class ASBLBridgeService extends Service {
             return ASBLBridgeService.this.do_click(screenID, compId);
         }
 
-        @RequiresApi(api = Build.VERSION_CODES.N)
         @Override
         public boolean doubleClickByPos(int x, int y) throws RemoteException {
             return ASBLBridgeService.this.do_double_click(x, y);
         }
 
-        @RequiresApi(api = Build.VERSION_CODES.N)
         @Override
         public boolean swipe(int x1, int y1, int x2, int y2, int duration) throws RemoteException {
             return ASBLBridgeService.this.swipe(x1, y1, x2, y2, duration);
@@ -512,8 +510,69 @@ public class ASBLBridgeService extends Service {
         }
     }
 
+    private static boolean isAdbKeyboardActive() {
+        try {
+            Context context = asblService != null ? asblService : HSQConfig.getContext();
+            if (context == null) return false;
+
+            String currentIme = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
+            return currentIme != null && currentIme.toLowerCase().contains("com.android.adbkeyboard");
+        } catch (Exception ex) {
+            LOG.E(TAG, "Khong doc duoc input method hien tai: " + ex.getMessage());
+            return false;
+        }
+    }
+
+    private static boolean inputTextByAdbKeyboard(String text, boolean delay) {
+        if (!isAdbKeyboardActive()) {
+            LOG.E(TAG, "ADB Keyboard chua active, fallback sang ASBL.");
+            return false;
+        }
+
+        try {
+            Context context = asblService != null ? asblService : HSQConfig.getContext();
+            if (context == null) return false;
+
+            if (text == null || text.isEmpty()) {
+                Intent intent = new Intent("ADB_CLEAR_TEXT");
+                intent.setPackage("com.android.adbkeyboard");
+                context.sendBroadcast(intent);
+                LOG.D(TAG, "Da gui ADB_CLEAR_TEXT bang ADB Keyboard.");
+                return true;
+            }
+
+            if (delay) {
+                for (char c : text.toCharArray()) {
+                    Intent intent = new Intent("ADB_INPUT_B64");
+                    intent.setPackage("com.android.adbkeyboard");
+                    String b64 = android.util.Base64.encodeToString(String.valueOf(c).getBytes("UTF-8"), android.util.Base64.NO_WRAP);
+                    intent.putExtra("msg", b64);
+                    context.sendBroadcast(intent);
+                    sleep(new Random().nextInt(200) + 100);
+                }
+            } else {
+                Intent intent = new Intent("ADB_INPUT_B64");
+                intent.setPackage("com.android.adbkeyboard");
+                String b64 = android.util.Base64.encodeToString(text.getBytes("UTF-8"), android.util.Base64.NO_WRAP);
+                intent.putExtra("msg", b64);
+                context.sendBroadcast(intent);
+            }
+
+            LOG.D(TAG, "Da nhap text bang ADB Keyboard: " + text.length() + " ky tu.");
+            return true;
+        } catch (Exception ex) {
+            LOG.E(TAG, "Loi nhap bang ADB Keyboard, fallback sang ASBL: " + ex.getMessage());
+            return false;
+        }
+    }
+
     public static boolean inputText(String text, ScreenNode targetObj, boolean delay) {
         LOG.D(TAG, "inputText text: " + text + " -- targetObj: " + targetObj + " -- delay: " + delay);
+        String safeText = text == null ? "" : text;
+        if (inputTextByAdbKeyboard(safeText, delay)) {
+            return true;
+        }
+
         AccessibilityNodeInfo root = asblService.getRootInActiveWindow();
         if (root != null) {
             AccessibilityNodeInfo focus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
@@ -529,14 +588,14 @@ public class ASBLBridgeService extends Service {
                 String test = "";
                 Bundle arguments = new Bundle();
                 if (delay) {
-                    for (char c : text.toCharArray()) {
+                    for (char c : safeText.toCharArray()) {
                         test += c;
                         arguments.putString(AccessibilityNodeInfoCompat.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, test);
                         focus.performAction(AccessibilityNodeInfoCompat.ACTION_SET_TEXT, arguments);
                         sleep(new Random().nextInt(300) + 200);
                     }
                 } else {
-                    arguments.putString(AccessibilityNodeInfoCompat.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                    arguments.putString(AccessibilityNodeInfoCompat.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, safeText);
                     focus.performAction(AccessibilityNodeInfoCompat.ACTION_SET_TEXT, arguments);
                 }
 
@@ -547,6 +606,11 @@ public class ASBLBridgeService extends Service {
                 return true;
             }
             else {
+                if (System.currentTimeMillis() >= 0) {
+                    LOG.E(TAG, "ASBL fallback failed: focused input node is not found.");
+                    try { root.recycle(); } catch (Exception ex) {}
+                    return false;
+                }
                 LOG.E(TAG, "inputText: Focused node is not found. Chuyển sang dùng ADB Keyboard...");
 
                 try {
@@ -800,7 +864,6 @@ public class ASBLBridgeService extends Service {
         return null;
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     private List<AccessibilityNodeInfo> getNodeListOnTree(AccessibilityNodeInfo mNodeInfo, boolean includeNullNode) {
         if (mNodeInfo == null) {
             return null;
@@ -816,13 +879,13 @@ public class ASBLBridgeService extends Service {
         }
 
         boolean isCollected = false;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (isValidNodeOnScreen(mNodeInfo, includeNullNode)) {
-                if (!result.contains(mNodeInfo)) {
-                    result.add(mNodeInfo);
-                }
-                isCollected = true;
+        if (isValidNodeOnScreen(mNodeInfo, includeNullNode))
+        {
+            if (!result.contains(mNodeInfo))
+            {
+                result.add(mNodeInfo);
             }
+            isCollected = true;
         }
 
         if (!isCollected) {
@@ -834,7 +897,6 @@ public class ASBLBridgeService extends Service {
         return result;
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     public static boolean isValidNodeOnScreen(AccessibilityNodeInfo node, boolean includeNullNode) {
         if (node != null) {
             node.getBoundsInScreen(tempRect);

@@ -10,6 +10,7 @@ if (localPropertiesFile.exists()) {
     }
 }
 android {
+    //noinspection GrDeprecatedAPIUsage
     compileSdk 36
 
     defaultConfig {
@@ -20,6 +21,7 @@ android {
         versionCode rootProject.ext.myVersionCode
         versionName rootProject.ext.myVersionName
         ndk {
+            //noinspection ChromeOsAbiSupport
             abiFilters 'arm64-v8a', 'armeabi-v7a'
         }
         buildConfigField "int", "TOOL_VERSION_CODE", "${rootProject.ext.myVersionCode}"
@@ -73,9 +75,9 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.14.0'
     implementation 'com.ibm.icu:icu4j:78.3'
     implementation 'com.google.mlkit:text-recognition:16.0.1'
-    implementation 'io.socket:socket.io-client:2.1.0'//server socket show màn hình
+    implementation 'io.socket:socket.io-client:2.1.2'//server socket show màn hình
 
     // Thư viện riêng của bạn
-    implementation 'com.github.hysyquay302:hsq:2.2.0'
+    implementation 'com.github.hysyquay302:hsq:2.2.7'
 
 }

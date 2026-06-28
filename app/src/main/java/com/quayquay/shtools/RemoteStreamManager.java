@@ -19,6 +19,11 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.net.URISyntaxException;
 
+import com.quayquay.hsq.tools.HSQDevice;
+import com.quayquay.hsq.tools.HSQService;
+import com.quayquay.hsq.tools.HSQServiceManager;
+import com.quayquay.shtools.services.ASBLBridgeService;
+
 import io.socket.client.Socket;
 
 public class RemoteStreamManager {
@@ -35,6 +40,7 @@ public class RemoteStreamManager {
     private VirtualDisplay virtualDisplay;
     private ImageReader imageReader;
     private boolean isStreaming = false;
+    private boolean ownsMediaProjection = false;
     private long lastFrameTime = 0;
     private boolean streamRequested = false;
 
@@ -93,6 +99,14 @@ public class RemoteStreamManager {
                             }
                         } catch (Exception e) { e.printStackTrace(); }
                     })
+                    .on("apk_receive_reboot", args -> {
+                        try {
+                            JSONObject data = (JSONObject) args[0];
+                            if (data.getString("device_id").equals(deviceId)) {
+                                handleRebootCommand();
+                            }
+                        } catch (Exception e) { e.printStackTrace(); }
+                    })
                     .on("apk_receive_action", args -> {
                         try {
                             JSONObject data = (JSONObject) args[0];
@@ -132,16 +146,30 @@ public class RemoteStreamManager {
         }
     }
 
-    private void startStream() {
-        if (isStreaming || MainActivity.sMediaProjectionData == null) return;
+    private synchronized void startStream() {
+        if (isStreaming) return;
         try {
             // KHỞI ĐỘNG DỊCH VỤ NGẦM TRƯỚC
             android.content.Intent serviceIntent = new android.content.Intent(context, com.quayquay.shtools.services.StreamService.class);
             context.startForegroundService(serviceIntent);
             try { Thread.sleep(100); } catch (Exception ignored) {}
 
-            MediaProjectionManager mpm = (MediaProjectionManager) context.getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-            mediaProjection = mpm.getMediaProjection(MainActivity.sMediaProjectionResultCode, MainActivity.sMediaProjectionData);
+            HSQService hsqService = HSQServiceManager.getInstance();
+            if (hsqService != null && hsqService.isMediaProjectionReady()) {
+                mediaProjection = hsqService.getMediaProjectionForSharedDisplay();
+                ownsMediaProjection = false;
+                android.util.Log.d(TAG, "Dung chung MediaProjection cua HSQService cho live web.");
+            } else if (hsqService == null && MainActivity.sMediaProjectionData != null) {
+                MediaProjectionManager mpm = (MediaProjectionManager) context.getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+                mediaProjection = mpm.getMediaProjection(MainActivity.sMediaProjectionResultCode, MainActivity.sMediaProjectionData);
+                ownsMediaProjection = mediaProjection != null;
+                android.util.Log.d(TAG, "Tao MediaProjection rieng cho live web vi HSQService chua chay.");
+            } else {
+                android.util.Log.w(TAG, "Chua co MediaProjection chinh, bo qua start live de tranh lam mat quyen chup cua tool.");
+                context.stopService(new android.content.Intent(context, com.quayquay.shtools.services.StreamService.class));
+                return;
+            }
+
             if (mediaProjection == null) return;
             isStreaming = true;
 
@@ -211,11 +239,15 @@ public class RemoteStreamManager {
         }
     }
 
-    private void stopStream() {
+    private synchronized void stopStream() {
         isStreaming = false;
         if (virtualDisplay != null) virtualDisplay.release();
         if (imageReader != null) imageReader.close();
-        if (mediaProjection != null) mediaProjection.stop();
+        virtualDisplay = null;
+        imageReader = null;
+        if (ownsMediaProjection && mediaProjection != null) mediaProjection.stop();
+        mediaProjection = null;
+        ownsMediaProjection = false;
         // DỌN DẸP LUỒNG RIÊNG
         if (streamThread != null) {
             streamThread.quitSafely();
@@ -231,6 +263,20 @@ public class RemoteStreamManager {
             audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0);
         } else if ("DOWN".equals(type)) {
             audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0);
+        }
+    }
+
+    private void handleRebootCommand() {
+        try {
+            android.util.Log.d(TAG, "=> NHAN LENH REBOOT TU WEB");
+            if (!HSQDevice.reboot()) {
+                ASBLBridgeService.showPowerDialog();
+            }
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Loi reboot tu web: " + e.getMessage(), e);
+            try {
+                ASBLBridgeService.showPowerDialog();
+            } catch (Exception ignored) {}
         }
     }
 
