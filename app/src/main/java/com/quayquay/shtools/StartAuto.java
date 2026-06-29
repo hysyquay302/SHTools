@@ -5970,8 +5970,13 @@ public class StartAuto extends HSQService
                 delay(4500);
 
                 List<TextBlock> afterClick = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
-                if (!HSQTools.areAlmostSame(beforeClick, afterClick, 20))
+                boolean dropdownExpanded = isDropdownExpandedAfterClick(beforeClick, afterClick, 10);
+                if (dropdownExpanded || !HSQTools.areAlmostSame(beforeClick, afterClick, 10))
                 {
+                    if (dropdownExpanded)
+                    {
+                        updateNotificationContent("Dropdown mo: before=" + beforeClick.size() + ", after=" + afterClick.size());
+                    }
                     isOpened = true;
                     break;
                 }
@@ -6010,6 +6015,71 @@ public class StartAuto extends HSQService
         }
     }
 
+    private boolean isDropdownExpandedAfterClick(List<TextBlock> beforeClick, List<TextBlock> afterClick, int tolerance)
+    {
+        List<TextBlock> before = getComparableDropdownBlocks(beforeClick);
+        List<TextBlock> after = getComparableDropdownBlocks(afterClick);
+        if (before.isEmpty() || after.size() < before.size() + 2) return false;
+
+        int newBlockCount = 0;
+        for (TextBlock afterBlock : after)
+        {
+            boolean existedBefore = false;
+            for (TextBlock beforeBlock : before)
+            {
+                if (isComparableDropdownBlockSame(beforeBlock, afterBlock, tolerance))
+                {
+                    existedBefore = true;
+                    break;
+                }
+            }
+
+            if (!existedBefore)
+            {
+                newBlockCount++;
+                if (newBlockCount >= 2) return true;
+            }
+        }
+
+        return false;
+    }
+
+    private List<TextBlock> getComparableDropdownBlocks(List<TextBlock> source)
+    {
+        List<TextBlock> result = new ArrayList<>();
+        if (source == null) return result;
+
+        for (TextBlock block : source)
+        {
+            if (block == null || block.text == null) continue;
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(block.text));
+            if (clean.isEmpty()) continue;
+            if (clean.equals("davuotxuong") || clean.startsWith("blocked") || clean.startsWith("qqtruncated")) continue;
+            if (clean.length() == 1 && !Character.isDigit(clean.charAt(0))) continue;
+            if (clean.length() > 140) clean = clean.substring(0, 140);
+            result.add(new TextBlock(clean, block.x, block.y));
+        }
+
+        return result;
+    }
+
+    private boolean isComparableDropdownBlockSame(TextBlock beforeBlock, TextBlock afterBlock, int tolerance)
+    {
+        if (beforeBlock == null || afterBlock == null) return false;
+        boolean xNear = Math.abs(beforeBlock.x - afterBlock.x) <= tolerance + 18;
+        boolean yNear = Math.abs(beforeBlock.y - afterBlock.y) <= tolerance + 55;
+        if (!xNear || !yNear) return false;
+
+        String beforeText = beforeBlock.text == null ? "" : beforeBlock.text;
+        String afterText = afterBlock.text == null ? "" : afterBlock.text;
+        if (beforeText.equals(afterText)) return true;
+
+        int maxLen = Math.max(beforeText.length(), afterText.length());
+        if (maxLen <= 2) return false;
+        int dist = HSQTools.levenshtein(beforeText, afterText);
+        if (maxLen <= 5) return dist <= 1;
+        return dist <= Math.max(2, (int) (maxLen * 0.25));
+    }
     private List<TextBlock> clickAccordion(String step)
     {
         Matcher match = java.util.regex.Pattern.compile("\\{([^}]+)\\}").matcher(step);
