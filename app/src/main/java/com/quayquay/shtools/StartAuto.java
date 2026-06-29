@@ -4679,6 +4679,7 @@ public class StartAuto extends HSQService
     private List<TextBlock> clickButton(String step)
     {
         int slVuot = 0;
+        int navRevealSwipeCount = 0;
         String currentXml = "";
 
         Matcher matchBtn = java.util.regex.Pattern.compile("\\{([^{}]+)\\}").matcher(step);
@@ -4689,9 +4690,11 @@ public class StartAuto extends HSQService
         final String targetNorm = isArrow ? rawTarget : cleanTargetNorm;
         final boolean isCardNextTarget = cleanTargetNorm.matches("^(nextthe|nextcard|cardnext|chuyenthe|chuyenthetheo|thetieptheo|tiepthenay|thesau|muitenthe|arrowcard|nextattribute|attribute_next)$");
         final boolean isPageNextTarget = cleanTargetNorm.matches("^(nextpage|pagenext|chuyentrang|trangtieptheo|tieptheotrang|submitpage|submitform|hoanthanhtrang)$");
+        final boolean isAgreeOnlyTarget = cleanTargetNorm.matches("^(agree|accept|dongy|toidongy|iagree|chapnhan)$");
 
         // Phan biet next the va next page. Dau > tu AI chi la tin hieu mo ho, code van phai doc context man hinh.
         final boolean isNextIntent = isArrow || isCardNextTarget || isPageNextTarget || cleanTargetNorm.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep|batdau|muiten|arrow|tien|tienlen)$");
+        final boolean shouldPreferPageNavigationXml = isNextIntent && !isCardNextTarget && !isAgreeOnlyTarget;
         checkButtonAgainLoop:
         while (true)
         {
@@ -4807,6 +4810,21 @@ public class StartAuto extends HSQService
                 }
 
                 // 🌟 TẦNG 2.2: LƯỚI QUÉT TIÊU CHUẨN (MẮT THẦN OCR)
+                if (shouldPreferPageNavigationXml)
+                {
+                    int navAction = tryClickPageNavigationFromXml(step, smartList, slVuot, navRevealSwipeCount < 3);
+                    if (navAction == 1)
+                    {
+                        break checkButtonAgainLoop;
+                    }
+                    if (navAction == 2)
+                    {
+                        navRevealSwipeCount++;
+                        delay(1800);
+                        continue;
+                    }
+                }
+
                 if (isNextIntent && !isPageNextTarget && tryClickWebSurveyVisualArrowFallback(step, smartList, slVuot))
                 {
                     break checkButtonAgainLoop;
@@ -4819,6 +4837,9 @@ public class StartAuto extends HSQService
                             String cleanText = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(x.text));
 
                             if (rawText.isEmpty())
+                                return false;
+
+                            if (isNextIntent && !isAgreeOnlyTarget && isConsentChoiceOnly(cleanText))
                                 return false;
 
                             // 1. ĐỒNG HÓA KÝ TỰ MŨI TÊN
@@ -4834,7 +4855,7 @@ public class StartAuto extends HSQService
 
                                 if (rawText.equals(">") || rawText.equals(">>") || rawText.equals("->") || rawText.equals("=>") || rawText.contains("→"))
                                     return true;
-                                if (cleanText.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|batdau|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep|dongyvabatdau|dongy)$"))
+                                if (cleanText.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|>|>>|>>>|gotonextquestion|fwd|forward|tiep|arrowright)$"))
                                     return true;
                             }
 
@@ -4852,7 +4873,10 @@ public class StartAuto extends HSQService
                                         return true;
 
                                     if (cleanText.length() >= 3 && targetNorm.contains(cleanText))
-                                        return true;
+                                    {
+                                        if (!isNextIntent || cleanText.length() >= Math.max(4, (int) (targetNorm.length() * 0.65)))
+                                            return true;
+                                    }
                                     int maxDist = targetNorm.length() <= 3 ? 0 : (targetNorm.length() <= 5 ? 1 : Math.max(2, (int)(targetNorm.length() * 0.3)));
                                     return HSQTools.levenshtein(cleanText, targetNorm) <= maxDist;
                                 }
@@ -4918,10 +4942,10 @@ public class StartAuto extends HSQService
                             boolean isInvalidTopText = rCheck != null && rCheck.centerY() < heightOfScreen * 0.2;
                             boolean isQuotedText = rawFullText.contains("'") || rawFullText.contains("\"") || rawFullText.contains("‘") || rawFullText.contains("’");
 
-                            if (!isInvalidTopText && !isQuotedText) {
+                            if (!isInvalidTopText && !isQuotedText && !(!isAgreeOnlyTarget && isConsentChoiceOnly(cleanFullText))) {
                                 if (rawFullText.contains(">") || rawFullText.contains(">>") || rawFullText.contains("->") || rawFullText.toLowerCase().contains("arrow_right") || rawFullText.toLowerCase().contains("arrowright"))
                                     isMatch = true;
-                                if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|batdau|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep|arrowright)$"))
+                                if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheo>|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|>|>>|>>>|gotonextquestion|fwd|forward|tiep|arrowright)$"))
                                     isMatch = true;
                                 // Tóm sống cái nút chuyển thẻ của bọn GfK/NIQ
                                 if (resId.toLowerCase().contains("next") || resId.toLowerCase().contains("continue") || resId.toLowerCase().contains("btn_forward") || resId.toLowerCase().contains("navright"))
@@ -5148,6 +5172,129 @@ public class StartAuto extends HSQService
         return null;
     }
 
+    private int tryClickPageNavigationFromXml(String step, List<HSQTools.TextBlock> smartList, int slVuot, boolean canReveal)
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return 0;
+
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            android.graphics.Rect bestRect = null;
+            String bestLabel = "";
+            boolean bestClipped = false;
+            int bestScore = Integer.MIN_VALUE;
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                if ("false".equals(node.getAttribute("enabled"))) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null) continue;
+
+                String text = node.getAttribute("text");
+                String desc = node.getAttribute("content-desc");
+                String resId = node.getAttribute("resource-id");
+                String clazz = node.getAttribute("class");
+                String clickable = node.getAttribute("clickable");
+                String focusable = node.getAttribute("focusable");
+
+                String rawFullText = ((text == null ? "" : text) + " " + (desc == null ? "" : desc)).trim();
+                String cleanFullText = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawFullText));
+                if (isConsentChoiceOnly(cleanFullText)) continue;
+
+                String resLower = resId == null ? "" : resId.toLowerCase(Locale.US);
+                String clazzLower = clazz == null ? "" : clazz.toLowerCase(Locale.US);
+                boolean navId = resLower.contains("nav") || resLower.contains("next") || resLower.contains("continue") || resLower.contains("submit");
+                boolean nextText = isNextNavigationText(rawFullText, cleanFullText);
+                boolean clipped = r.height() < 24 || r.bottom >= heightOfScreen - 80 || r.centerY() >= heightOfScreen - 100;
+                boolean navOnlyReveal = navId && !nextText && clipped;
+                if (!nextText && !navOnlyReveal) continue;
+
+                boolean buttonish = clazzLower.contains("button")
+                        || clazzLower.contains("image")
+                        || "true".equals(clickable)
+                        || "true".equals(focusable)
+                        || navId;
+                if (!buttonish) continue;
+
+                if (r.height() > 800) continue;
+                if (!clipped)
+                {
+                    if (r.centerY() <= 180 || r.centerY() >= heightOfScreen - 80) continue;
+                    if (r.width() < 30 || r.height() < 30) continue;
+                    if (navId && !"true".equals(clickable) && !clazzLower.contains("button") && r.width() > widthOfScreen * 0.45)
+                        continue;
+                }
+
+                int score = r.centerY();
+                if (nextText) score += 5000;
+                if (clazzLower.contains("button")) score += 2500;
+                if ("true".equals(clickable)) score += 1800;
+                if (navId) score += 1200;
+                if (resLower.contains("nav-container") || resLower.contains("tblnav") || resLower.endsWith("navigation")) score += 1200;
+                if (cleanFullText.matches("^(tieptheo|next|continue|submit|trangtieptheo|batdau|dongyvabatdau|agreeandcontinue)$")) score += 1800;
+                if (r.centerX() > widthOfScreen / 2) score += 500;
+                if (clipped) score += 700;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestRect = r;
+                    bestLabel = rawFullText.isEmpty() ? resId : rawFullText;
+                    bestClipped = clipped;
+                }
+            }
+
+            if (bestRect == null) return 0;
+
+            if (bestClipped)
+            {
+                if (!canReveal) return 0;
+                updateNotificationContent("XML Nav: nut [" + bestLabel + "] dang ket duoi day, vuot xuong de lo nut");
+                swipe(xs, ysBot, xs, ysTop, Math.min(1400, Math.max(700, swipeDuration)));
+                return 2;
+            }
+
+            int clickX = Math.max(24, Math.min(widthOfScreen - 24, bestRect.centerX()));
+            int clickY = Math.max(181, Math.min(heightOfScreen - 120, bestRect.centerY()));
+            updateNotificationContent("XML Nav: bam nut [" + bestLabel + "] tai " + clickX + "," + clickY);
+
+            List<HSQTools.TextBlock> beforeClick = smartList == null
+                    ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
+                    : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
+            click(clickX, clickY, false);
+            if (!checkNextOK(beforeClick, step))
+            {
+                swipeToTop(slVuot, false);
+            }
+            return 1;
+        }
+        catch (Exception ignored)
+        {
+            return 0;
+        }
+    }
+
+    private boolean isNextNavigationText(String rawFullText, String cleanFullText)
+    {
+        String rawLower = rawFullText == null ? "" : rawFullText.toLowerCase(Locale.US).replaceAll("\\s+", "");
+        if (rawLower.contains(">") || rawLower.contains("->") || rawLower.contains("arrow_right") || rawLower.contains("arrowright")) return true;
+        if (cleanFullText == null) cleanFullText = "";
+        if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheotrang|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|gotonextquestion|fwd|forward|tiep|arrowright)$")) return true;
+        return rawLower.length() <= 60 && (rawLower.contains("next") || rawLower.contains("continue") || rawLower.contains("submit") || rawLower.contains("theo") || rawLower.contains("batdau"));
+    }
+
+    private boolean isConsentChoiceOnly(String cleanText)
+    {
+        if (cleanText == null || cleanText.isEmpty()) return false;
+        return cleanText.matches("^(dongy|toidongy|khongdongy|toikhongdongy|agree|iagree|disagree|donotagree|khongchapnhan|privacypolicy)$");
+    }
     private boolean tryClickWebSurveyVisualArrowFallback(String step, List<HSQTools.TextBlock> smartList, int slVuot)
     {
         try
