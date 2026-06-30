@@ -5209,10 +5209,11 @@ public class StartAuto extends HSQService
                 if (isConsentChoiceOnly(cleanFullText)) continue;
 
                 String resLower = resId == null ? "" : resId.toLowerCase(Locale.US);
+                if (resLower.contains("statusbarbackground") || resLower.contains("navigationbarbackground")) continue;
                 String clazzLower = clazz == null ? "" : clazz.toLowerCase(Locale.US);
                 boolean navId = resLower.contains("nav") || resLower.contains("next") || resLower.contains("continue") || resLower.contains("submit");
                 boolean nextText = isNextNavigationText(rawFullText, cleanFullText);
-                boolean clipped = r.height() < 24 || r.bottom >= heightOfScreen - 80 || r.centerY() >= heightOfScreen - 100;
+                boolean clipped = r.height() < 24 || (r.bottom >= heightOfScreen - 80 && r.height() < 80) || r.centerY() >= heightOfScreen - 40;
                 boolean navOnlyReveal = navId && !nextText && clipped;
                 if (!nextText && !navOnlyReveal) continue;
 
@@ -5238,7 +5239,7 @@ public class StartAuto extends HSQService
                 if ("true".equals(clickable)) score += 1800;
                 if (navId) score += 1200;
                 if (resLower.contains("nav-container") || resLower.contains("tblnav") || resLower.endsWith("navigation")) score += 1200;
-                if (cleanFullText.matches("^(tieptheo|next|continue|submit|trangtieptheo|batdau|dongyvabatdau|agreeandcontinue)$")) score += 1800;
+                if (cleanFullText.matches("^(tieptheo|xinhaytieptuc|haytieptuc|vuilongtieptuc|next|continue|submit|trangtieptheo|batdau|dongyvabatdau|agreeandcontinue)$")) score += 1800;
                 if (r.centerX() > widthOfScreen / 2) score += 500;
                 if (clipped) score += 700;
 
@@ -5286,8 +5287,8 @@ public class StartAuto extends HSQService
         String rawLower = rawFullText == null ? "" : rawFullText.toLowerCase(Locale.US).replaceAll("\\s+", "");
         if (rawLower.contains(">") || rawLower.contains("->") || rawLower.contains("arrow_right") || rawLower.contains("arrowright")) return true;
         if (cleanFullText == null) cleanFullText = "";
-        if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|trangtieptheo|tieptheotrang|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|gotonextquestion|fwd|forward|tiep|arrowright)$")) return true;
-        return rawLower.length() <= 60 && (rawLower.contains("next") || rawLower.contains("continue") || rawLower.contains("submit") || rawLower.contains("theo") || rawLower.contains("batdau"));
+        if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|xinhaytieptuc|haytieptuc|vuilongtieptuc|trangtieptheo|tieptheotrang|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|gotonextquestion|fwd|forward|tiep|arrowright)$")) return true;
+        return cleanFullText.length() <= 80 && (cleanFullText.contains("tieptuc") || cleanFullText.contains("tieptheo") || cleanFullText.contains("next") || cleanFullText.contains("continue") || cleanFullText.contains("submit") || cleanFullText.contains("batdau"));
     }
 
     private boolean isConsentChoiceOnly(String cleanText)
