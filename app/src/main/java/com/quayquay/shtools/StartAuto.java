@@ -4494,7 +4494,7 @@ public class StartAuto extends HSQService
                         if (vuotLenLai == 0)
                         {
                             vuotLenLai++;
-                            swipe(xs, ysTop, xs, ysBot, swipeDuration);
+                            safeSwipeClickToText(ysTop, ysBot);
                             delay(2000);
                             clickToTextMinY = 0; // Màn hình thay đổi -> Reset Y limit!
                         }
@@ -4512,10 +4512,19 @@ public class StartAuto extends HSQService
                         int finalClickX = target.x;
                         int finalClickY = target.y;
 
-                        // BỌC THÉP X TẦNG CAO: DÙNG XML ĐỂ ÉP VỀ LỖ RADIO
-                        finalClickX = snapToRadioX(finalClickX, finalClickY);
+                        android.graphics.Point checkmarkPoint = findChoiceCheckmarkPointForText(textWantToClick, target, checkAnswer);
+                        if (checkmarkPoint != null)
+                        {
+                            finalClickX = checkmarkPoint.x;
+                            finalClickY = checkmarkPoint.y;
+                            updateNotificationContent("Click Tick-Card: Chot [" + textWantToClick + "] tai " + finalClickX + "," + finalClickY);
+                        }
+                        else
+                        {
+                            finalClickX = snapToRadioX(finalClickX, finalClickY);
+                            updateNotificationContent("Click Text: Chot [" + textWantToClick + "] tai Y=" + finalClickY);
+                        }
 
-                        updateNotificationContent("Click Text: Chọt [" + textWantToClick + "] tại Y=" + finalClickY);
                         click(finalClickX, finalClickY, false);
                         
                         // Cập nhật lại Y Limit để click kế tiếp phải nằm DƯỚI nút này
@@ -4595,11 +4604,11 @@ public class StartAuto extends HSQService
                     temp = checkAnswer;
                     if (vuotLenLai == 0)
                     {
-                        swipe(xs, ysBot, xs, ysTop, swipeDuration);
+                        safeSwipeClickToText(ysBot, ysTop);
                     }
                     else
                     {
-                        swipe(xs, ysTop, xs, ysBot, swipeDuration);
+                        safeSwipeClickToText(ysTop, ysBot);
                     }
                     delay(2000);
                     clickToTextMinY = 0; // Màn hình thay đổi -> Reset Y limit!
@@ -4611,6 +4620,333 @@ public class StartAuto extends HSQService
         return null;
     }
 
+    private void safeSwipeClickToText(int fromY, int toY)
+    {
+        smartScroll(fromY, toY, "clicktotext");
+    }
+
+    private void smartScroll(int fromY, int toY, String reason)
+    {
+        int safeFromY = Math.max(220, Math.min(heightOfScreen - 180, fromY));
+        int safeToY = Math.max(220, Math.min(heightOfScreen - 180, toY));
+        boolean forward = safeFromY > safeToY;
+
+        String beforeSignature = getSmartScrollXmlSignature();
+        if (tryAccessibilitySmartScroll(forward, beforeSignature, reason))
+        {
+            return;
+        }
+
+        int safeX = findSafeSwipeXForClickToText(safeFromY, safeToY);
+        safeFromY = findSafeSwipeYForClickToText(safeX, safeFromY);
+        updateNotificationContent("SmartScroll touch(" + reason + "): " + safeX + "," + safeFromY + " -> " + safeToY);
+        swipe(safeX, safeFromY, safeX, safeToY, swipeDuration);
+    }
+
+    private boolean tryAccessibilitySmartScroll(boolean forward, String beforeSignature, String reason)
+    {
+        try
+        {
+            boolean ok = forward ? ASBLBridgeService.scrollForward() : ASBLBridgeService.scrollBackward();
+            if (!ok) return false;
+
+            delay(850);
+            String afterSignature = getSmartScrollXmlSignature();
+            if (!beforeSignature.isEmpty() && !afterSignature.isEmpty() && !beforeSignature.equals(afterSignature))
+            {
+                updateNotificationContent("SmartScroll ASBL(" + reason + "): " + (forward ? "down" : "up"));
+                return true;
+            }
+        }
+        catch (Exception ignored) {}
+
+        return false;
+    }
+
+    private String getSmartScrollXmlSignature()
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return "";
+            return xml.replaceAll("focused=\"(?:true|false)\"", "")
+                    .replaceAll("selected=\"(?:true|false)\"", "")
+                    .replaceAll("\\s+", " ")
+                    .trim();
+        }
+        catch (Exception ignored)
+        {
+            return "";
+        }
+    }
+
+    private int findSafeSwipeXForClickToText(int fromY, int toY)
+    {
+        int[] candidates = new int[]{
+                widthOfScreen - 72,
+                72,
+                widthOfScreen - 144,
+                144,
+                widthOfScreen - 220,
+                220,
+                xs
+        };
+
+        String xml = "";
+        try { xml = HSQTools.getFlexibleXML(); } catch (Exception ignored) {}
+
+        int bestX = xs;
+        int bestScore = Integer.MAX_VALUE;
+        for (int rawX : candidates)
+        {
+            int x = Math.max(24, Math.min(widthOfScreen - 24, rawX));
+            int score = scoreSwipeColumnRisk(xml, x, fromY, toY);
+            score += Math.abs(x - (widthOfScreen - 72)) / 8; // uu tien gutter phai neu rui ro ngang nhau
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestX = x;
+            }
+        }
+
+        return bestX;
+    }
+
+    private int findSafeSwipeYForClickToText(int x, int preferredY)
+    {
+        String xml = "";
+        try { xml = HSQTools.getFlexibleXML(); } catch (Exception ignored) {}
+        int[] offsets = new int[]{0, -140, 140, -260, 260, -380, 380};
+        for (int offset : offsets)
+        {
+            int y = Math.max(220, Math.min(heightOfScreen - 180, preferredY + offset));
+            if (!isSwipePointRisky(xml, x, y)) return y;
+        }
+        return Math.max(220, Math.min(heightOfScreen - 180, preferredY));
+    }
+
+    private int scoreSwipeColumnRisk(String xml, int x, int fromY, int toY)
+    {
+        int score = 0;
+        if (isSwipePointRisky(xml, x, fromY)) score += 10000;
+        if (isSwipePointRisky(xml, x, toY)) score += 3500;
+
+        try
+        {
+            if (xml == null || xml.trim().isEmpty()) return score;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+            int top = Math.min(fromY, toY);
+            int bottom = Math.max(fromY, toY);
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+                if (r.bottom < top || r.top > bottom) continue;
+                if (x < r.left - 10 || x > r.right + 10) continue;
+                if (r.top < 180 || r.bottom > heightOfScreen - 20) continue;
+
+                String text = node.getAttribute("text");
+                String desc = node.getAttribute("content-desc");
+                String clazz = node.getAttribute("class");
+                if (isIgnorableSwipeRiskNode(r, clazz)) continue;
+                boolean hasText = (text != null && !text.trim().isEmpty()) || (desc != null && !desc.trim().isEmpty());
+                boolean clickable = "true".equals(node.getAttribute("clickable"));
+                boolean riskyClass = clazz != null && (clazz.contains("TextView") || clazz.contains("Image") || clazz.contains("Button") || clazz.contains("View"));
+
+                if (clickable) score += 900;
+                if (hasText) score += 650;
+                if (riskyClass && r.height() > 60) score += 180;
+                if (clickable && hasText) score += 1200;
+            }
+        }
+        catch (Exception ignored) {}
+
+        return score;
+    }
+
+    private boolean isSwipePointRisky(String xml, int x, int y)
+    {
+        try
+        {
+            if (xml == null || xml.trim().isEmpty()) return false;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+                if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
+                if (r.top < 180 || r.bottom > heightOfScreen - 20) continue;
+
+                String text = node.getAttribute("text");
+                String desc = node.getAttribute("content-desc");
+                String clazz = node.getAttribute("class");
+                if (isIgnorableSwipeRiskNode(r, clazz)) continue;
+                boolean hasText = (text != null && !text.trim().isEmpty()) || (desc != null && !desc.trim().isEmpty());
+                boolean clickable = "true".equals(node.getAttribute("clickable"));
+                boolean riskyClass = clazz != null && (clazz.contains("TextView") || clazz.contains("Image") || clazz.contains("Button"));
+                if (clickable || hasText || riskyClass) return true;
+            }
+        }
+        catch (Exception ignored) {}
+        return false;
+    }
+    private boolean isIgnorableSwipeRiskNode(android.graphics.Rect r, String clazz)
+    {
+        if (r == null) return true;
+        String className = clazz == null ? "" : clazz;
+        boolean hugeContainer = r.width() >= widthOfScreen * 0.85f && r.height() >= heightOfScreen * 0.45f;
+        if (hugeContainer) return true;
+        if ((className.contains("WebView") || className.contains("FrameLayout") || className.contains("LinearLayout"))
+                && r.width() >= widthOfScreen * 0.70f && r.height() >= heightOfScreen * 0.30f)
+            return true;
+        return false;
+    }
+    private android.graphics.Point findChoiceCheckmarkPointForText(String textWantToClick, HSQTools.TextBlock target, List<HSQTools.TextBlock> visibleBlocks)
+    {
+        if (target == null || !isCheckmarkChoiceScreen(visibleBlocks)) return null;
+
+        android.graphics.Point greenPoint = findGreenCheckmarkPointNearTarget(target, visibleBlocks);
+        if (greenPoint != null)
+        {
+            return greenPoint;
+        }
+
+        return null;
+    }
+
+    private boolean isCheckmarkChoiceScreen(List<HSQTools.TextBlock> visibleBlocks)
+    {
+        if (visibleBlocks == null || visibleBlocks.isEmpty()) return false;
+
+        for (HSQTools.TextBlock block : visibleBlocks)
+        {
+            if (block == null || block.text == null) continue;
+            String raw = block.text.trim();
+            if (raw.isEmpty()) continue;
+
+            String rawLower = raw.toLowerCase(Locale.US);
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+            boolean hasTick = raw.contains("\u2713") || raw.contains("\u2714") || raw.contains("\u2705")
+                    || clean.contains("tich") || clean.contains("check") || clean.contains("tick");
+            boolean hasTap = clean.contains("nhap") || clean.contains("bam") || clean.contains("tap") || clean.contains("click");
+            boolean hasChoose = clean.contains("luachon") || clean.contains("chon") || clean.contains("select")
+                    || clean.contains("choose") || clean.contains("thichnhat") || rawLower.contains("like best");
+
+            if ((hasTick && (hasTap || hasChoose)) || (hasTap && hasChoose)) return true;
+        }
+
+        return false;
+    }
+
+    private android.graphics.Point findGreenCheckmarkPointNearTarget(HSQTools.TextBlock target, List<HSQTools.TextBlock> visibleBlocks)
+    {
+        android.graphics.Bitmap bmp = null;
+        try
+        {
+            bmp = HSQTools.getScreenBitmap();
+            if (bmp == null) return null;
+
+            int screenW = bmp.getWidth();
+            int screenH = bmp.getHeight();
+            if (screenW <= 0 || screenH <= 0) return null;
+
+            int nextTextY = screenH - 120;
+            if (visibleBlocks != null)
+            {
+                for (HSQTools.TextBlock block : visibleBlocks)
+                {
+                    if (block == null || block.text == null) continue;
+                    if (block.y <= target.y + 180 || block.y >= nextTextY) continue;
+
+                    String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(block.text));
+                    if (clean.isEmpty()) continue;
+                    if (clean.contains("nhap") && (clean.contains("luachon") || clean.contains("chon"))) continue;
+                    nextTextY = block.y;
+                }
+            }
+
+            int searchTop = Math.max(181, target.y - 180);
+            int searchBottom = Math.min(screenH - 120, target.y + 820);
+            if (nextTextY < searchBottom && nextTextY - target.y > 250)
+            {
+                searchBottom = Math.max(target.y + 180, nextTextY - 20);
+            }
+
+            int searchLeft = Math.max((int) (screenW * 0.50f), Math.min(target.x + 80, (int) (screenW * 0.75f)));
+            int searchRight = screenW - 12;
+            if (searchBottom <= searchTop || searchRight <= searchLeft) return null;
+
+            long sumX = 0L;
+            long sumY = 0L;
+            int count = 0;
+            int minX = Integer.MAX_VALUE;
+            int minY = Integer.MAX_VALUE;
+            int maxX = Integer.MIN_VALUE;
+            int maxY = Integer.MIN_VALUE;
+            int step = 4;
+
+            for (int y = searchTop; y < searchBottom; y += step)
+            {
+                for (int x = searchLeft; x < searchRight; x += step)
+                {
+                    int color = bmp.getPixel(x, y);
+                    if (!isLikelyGreenCheckPixel(color)) continue;
+
+                    sumX += x;
+                    sumY += y;
+                    count++;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+
+            if (count < 40) return null;
+
+            int blobW = maxX - minX + step;
+            int blobH = maxY - minY + step;
+            if (blobW < 45 || blobH < 45) return null;
+            if (blobW > screenW * 0.38f || blobH > 460) return null;
+
+            float ratio = (float) Math.max(blobW, blobH) / Math.max(1, Math.min(blobW, blobH));
+            if (ratio > 2.4f) return null;
+
+            int clickX = (int) (sumX / count);
+            int clickY = (int) (sumY / count);
+            if (clickX < searchLeft || clickX > searchRight || clickY < searchTop || clickY > searchBottom) return null;
+
+            return new android.graphics.Point(clickX, clickY);
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+        finally
+        {
+            try
+            {
+                if (bmp != null && !bmp.isRecycled()) bmp.recycle();
+            }
+            catch (Exception ignored) {}
+        }
+    }
+
+    private boolean isLikelyGreenCheckPixel(int color)
+    {
+        int r = android.graphics.Color.red(color);
+        int g = android.graphics.Color.green(color);
+        int b = android.graphics.Color.blue(color);
+        return g >= 90 && r <= 80 && b <= 140 && g >= r + 45 && g >= b + 15;
+    }
     private boolean shouldBlockClickButtonOnUnfinishedPicker(List<TextBlock> visibleBlocks)
     {
         try
@@ -4734,6 +5070,7 @@ public class StartAuto extends HSQService
                         javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
                         org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(currentXml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                         org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+                        int bottomOverlayTop = findLikelyBottomOverlayTop(nodes);
 
                         android.graphics.Rect bestBlankBtn = null;
                         int maxBlankY = 0;
@@ -4795,8 +5132,9 @@ public class StartAuto extends HSQService
                         if (bestBlankBtn != null)
                         {
                             updateNotificationContent("Đồng hóa Next: Bắt sống NÚT ẢNH TRỐNG XỊN tại " + bestBlankBtn.centerX() + "," + bestBlankBtn.centerY());
+                            int clickY = getVisibleClickYAvoidingBottomOverlay(bestBlankBtn, bottomOverlayTop);
                             smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
-                            click(bestBlankBtn.centerX(), bestBlankBtn.centerY(), false);
+                            click(bestBlankBtn.centerX(), clickY, false);
                             if (!checkNextOK(smartList, step))
                             {
                                 swipeToTop(slVuot, false);
@@ -4919,6 +5257,7 @@ public class StartAuto extends HSQService
                     javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
                     org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(currentXml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                     org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+                    int bottomOverlayTop = findLikelyBottomOverlayTop(nodes);
 
                     android.graphics.Rect bestXmlBtnRect = null;
                     int maxCenterY = 0;
@@ -5029,8 +5368,9 @@ public class StartAuto extends HSQService
                     if (bestXmlBtnRect != null)
                     {
                         updateNotificationContent("Đồng hóa Next: XML Bắt sống tại " + bestXmlBtnRect.centerX() + "," + bestXmlBtnRect.centerY());
+                        int clickY = getVisibleClickYAvoidingBottomOverlay(bestXmlBtnRect, bottomOverlayTop);
                         smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
-                        click(bestXmlBtnRect.centerX(), bestXmlBtnRect.centerY(), false);
+                        click(bestXmlBtnRect.centerX(), clickY, false);
                         if (!checkNextOK(smartList, step))
                         {
                             swipeToTop(slVuot, false);
@@ -5158,11 +5498,11 @@ public class StartAuto extends HSQService
 
                 if (vuotLenLai == 0)
                 {
-                    swipe(xs, ysBot, xs, ysTop, swipeDuration);
+                    smartScroll(ysBot, ysTop, "clickbutton");
                 }
                 else
                 {
-                    swipe(xs, ysTop, xs, ysBot, swipeDuration);
+                    smartScroll(ysTop, ysBot, "clickbutton");
                     slVuot++;
                 }
 
@@ -5183,6 +5523,7 @@ public class StartAuto extends HSQService
             javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
             org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+            int bottomOverlayTop = findLikelyBottomOverlayTop(nodes);
 
             android.graphics.Rect bestRect = null;
             String bestLabel = "";
@@ -5213,7 +5554,10 @@ public class StartAuto extends HSQService
                 String clazzLower = clazz == null ? "" : clazz.toLowerCase(Locale.US);
                 boolean navId = resLower.contains("nav") || resLower.contains("next") || resLower.contains("continue") || resLower.contains("submit");
                 boolean nextText = isNextNavigationText(rawFullText, cleanFullText);
-                boolean clipped = r.height() < 24 || (r.bottom >= heightOfScreen - 80 && r.height() < 80) || r.centerY() >= heightOfScreen - 40;
+                int visibleBottomBeforeOverlay = bottomOverlayTop > 0 ? Math.min(r.bottom, bottomOverlayTop - 8) : r.bottom;
+                int visibleHeightBeforeOverlay = Math.max(0, visibleBottomBeforeOverlay - Math.max(r.top, 181));
+                boolean clippedByBottomOverlay = bottomOverlayTop > 0 && r.bottom > bottomOverlayTop && visibleHeightBeforeOverlay < 24;
+                boolean clipped = r.height() < 24 || (r.bottom >= heightOfScreen - 80 && r.height() < 80) || r.centerY() >= heightOfScreen - 40 || clippedByBottomOverlay;
                 boolean navOnlyReveal = navId && !nextText && clipped;
                 if (!nextText && !navOnlyReveal) continue;
 
@@ -5258,12 +5602,12 @@ public class StartAuto extends HSQService
             {
                 if (!canReveal) return 0;
                 updateNotificationContent("XML Nav: nut [" + bestLabel + "] dang ket duoi day, vuot xuong de lo nut");
-                swipe(xs, ysBot, xs, ysTop, Math.min(1400, Math.max(700, swipeDuration)));
+                smartScroll(ysBot, ysTop, "xmlnav_reveal");
                 return 2;
             }
 
             int clickX = Math.max(24, Math.min(widthOfScreen - 24, bestRect.centerX()));
-            int clickY = Math.max(181, Math.min(heightOfScreen - 120, bestRect.centerY()));
+            int clickY = getVisibleClickYAvoidingBottomOverlay(bestRect, bottomOverlayTop);
             updateNotificationContent("XML Nav: bam nut [" + bestLabel + "] tai " + clickX + "," + clickY);
 
             List<HSQTools.TextBlock> beforeClick = smartList == null
@@ -5295,6 +5639,55 @@ public class StartAuto extends HSQService
     {
         if (cleanText == null || cleanText.isEmpty()) return false;
         return cleanText.matches("^(dongy|toidongy|khongdongy|toikhongdongy|agree|iagree|disagree|donotagree|khongchapnhan|privacypolicy)$");
+    }
+    private int findLikelyBottomOverlayTop(org.w3c.dom.NodeList nodes)
+    {
+        if (nodes == null) return -1;
+
+        int bestTop = Integer.MAX_VALUE;
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+            if (r == null) continue;
+            if (r.top < heightOfScreen * 0.55 || r.width() < widthOfScreen * 0.55 || r.height() < 50) continue;
+
+            String text = node.getAttribute("text");
+            String desc = node.getAttribute("content-desc");
+            String resId = node.getAttribute("resource-id");
+            String clazz = node.getAttribute("class");
+            String raw = ((text == null ? "" : text) + " "
+                    + (desc == null ? "" : desc) + " "
+                    + (resId == null ? "" : resId) + " "
+                    + (clazz == null ? "" : clazz)).toLowerCase(Locale.US);
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+
+            boolean bottomNavText = clean.contains("home") && clean.contains("surveys") && clean.contains("menu");
+            boolean bottomNavMeta = raw.contains("bottomnavigation") || raw.contains("bottom_nav") || raw.contains("bottomnav") || raw.contains("tablayout");
+            boolean androidNavBar = raw.contains("navigationbarbackground");
+            if (bottomNavText || bottomNavMeta || androidNavBar)
+            {
+                bestTop = Math.min(bestTop, r.top);
+            }
+        }
+
+        return bestTop == Integer.MAX_VALUE ? -1 : bestTop;
+    }
+
+    private int getVisibleClickYAvoidingBottomOverlay(android.graphics.Rect r, int bottomOverlayTop)
+    {
+        int clickY = r.centerY();
+        if (bottomOverlayTop > 0 && r.top < bottomOverlayTop && r.bottom > bottomOverlayTop)
+        {
+            int visibleTop = Math.max(181, r.top);
+            int visibleBottom = Math.min(r.bottom, bottomOverlayTop - 12);
+            if (visibleBottom > visibleTop)
+            {
+                clickY = (visibleTop + visibleBottom) / 2;
+            }
+        }
+
+        return Math.max(181, Math.min(heightOfScreen - 120, clickY));
     }
     private boolean tryClickWebSurveyVisualArrowFallback(String step, List<HSQTools.TextBlock> smartList, int slVuot)
     {
