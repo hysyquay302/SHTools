@@ -15,6 +15,8 @@ import com.quayquay.shtools.extention.LOG;
 
 public class ApiAccessibilityService extends AccessibilityService {
     private static final String TAG = "ACCSBLT";
+    private static final String RUNTIME_PREFS = "QQ_PREFS";
+    private static final String PREF_SUPPRESS_ASBL_AUTO_OPEN_UNTIL = "suppress_asbl_auto_open_until";
     private static ApiAccessibilityService sInstance = null;
     @Override
     public void onCreate() {
@@ -87,13 +89,15 @@ public class ApiAccessibilityService extends AccessibilityService {
     protected void onServiceConnected() {
         LOG.I(TAG, "onServiceConnected");
         ASInterface.instance().init(this);
-        android.content.SharedPreferences prefs = HSQConfig.getContext().getSharedPreferences("QQ_PREFS", Context.MODE_PRIVATE);
+        android.content.SharedPreferences prefs = HSQConfig.getContext().getSharedPreferences(RUNTIME_PREFS, Context.MODE_PRIVATE);
         boolean isForceStopped = prefs.getBoolean("isForceStopped", false);
+        long suppressAutoOpenUntil = prefs.getLong(PREF_SUPPRESS_ASBL_AUTO_OPEN_UNTIL, 0L);
+        boolean suppressAutoOpen = System.currentTimeMillis() < suppressAutoOpenUntil;
 
         // Nếu KHÔNG bị Force Stop thì mới cho phép bật màn hình App lên
-        if (!isForceStopped) {
+        if (!isForceStopped && !suppressAutoOpen) {
             Intent intent = this.getPackageManager().getLaunchIntentForPackage(this.getPackageName());
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_FROM_BACKGROUND);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_FROM_BACKGROUND);
             startActivity(intent);
         }
     }

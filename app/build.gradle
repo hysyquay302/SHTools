@@ -78,6 +78,6 @@ dependencies {
     implementation 'io.socket:socket.io-client:2.1.2'//server socket show màn hình
 
     // Thư viện riêng của bạn
-    implementation 'com.github.hysyquay302:hsq:2.2.7'
+    implementation 'com.github.hysyquay302:hsq:2.2.8'
 
 }

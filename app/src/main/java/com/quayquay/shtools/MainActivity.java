@@ -22,6 +22,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -35,7 +36,15 @@ import com.quayquay.shtools.services.ApiAccessibilityService;
 import java.io.File;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+    private static final String API_PREFS = "QQ_PREFS_DATA";
+    private static final String RUNTIME_PREFS = "QQ_PREFS";
+    private static final String PREF_SAVED_API_KEY = "SAVED_API_KEY";
+    private static final String PREF_SAVED_DEVICE_ID = "saved_device_id";
+    private static final String PREF_RESTART_FROM_VOLUME = "restart_from_volume";
+    private static final String PREF_SUPPRESS_AUTOSTART_AFTER_VOLUME = "suppress_autostart_after_volume";
+
     private AutoCompleteTextView apiKeyAutoComplete;
+    private EditText deviceIdEditText;
     private java.util.List<ApiKeyItem> apiKeyList;
     private String selectedApiKey = "";
     public static class ApiKeyItem {
@@ -86,19 +95,38 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private ActivityVisibilityObserver observer;
     private boolean isOnClickRegisterCalled = false;
+    private boolean restartFromVolume = false;
+    private boolean suppressAutoStartAfterVolume = false;
     private final Handler handler = new Handler(Looper.getMainLooper()); // Fix: may be 'final'
 
     private void initPreferences() {
         // Fix: 'getDefaultSharedPreferences' is deprecated
-        sharedPreferences = getSharedPreferences("QQ_PREFS_DATA", Context.MODE_PRIVATE);
+        sharedPreferences = getSharedPreferences(API_PREFS, Context.MODE_PRIVATE);
         editor = sharedPreferences.edit();
+    }
+
+    private boolean isRestartFromVolumeIntent(Intent intent) {
+        return intent != null && intent.getBooleanExtra(PREF_RESTART_FROM_VOLUME, false);
+    }
+
+    private boolean hasMediaProjectionToken() {
+        return sMediaProjectionResultCode == Activity.RESULT_OK && sMediaProjectionData != null;
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        getSharedPreferences("QQ_PREFS", Context.MODE_PRIVATE).edit().putBoolean("isForceStopped", false).apply();
+        SharedPreferences runtimePrefs = getSharedPreferences(RUNTIME_PREFS, Context.MODE_PRIVATE);
+        restartFromVolume = isRestartFromVolumeIntent(getIntent())
+                || runtimePrefs.getBoolean(PREF_RESTART_FROM_VOLUME, false);
+        suppressAutoStartAfterVolume = (getIntent() != null && getIntent().getBooleanExtra(PREF_SUPPRESS_AUTOSTART_AFTER_VOLUME, false))
+                || runtimePrefs.getBoolean(PREF_SUPPRESS_AUTOSTART_AFTER_VOLUME, false);
+        runtimePrefs.edit()
+                .putBoolean("isForceStopped", false)
+                .putBoolean(PREF_RESTART_FROM_VOLUME, false)
+                .putBoolean(PREF_SUPPRESS_AUTOSTART_AFTER_VOLUME, false)
+                .apply();
         initPreferences();
 
         Button btnRemoveAdmin = findViewById(R.id.btn_remove_admin);
@@ -108,28 +136,32 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         btnDeleteChat.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // 🌟 SỬA LỖI ĐỎ: Gọi đích danh MainActivity.this
                 File historyFolder = new File(MainActivity.this.getFilesDir(), "Survey");
-                File historyFile = new File(historyFolder, "chat_history_zone.json");
+                File[] historyFiles = historyFolder.listFiles((dir, name) -> name.startsWith("chat_history") && name.endsWith(".json"));
 
-                if (historyFile.exists()) {
-                    boolean isDeleted = historyFile.delete();
-                    if (isDeleted) {
-                        // Xóa thành công thì báo thành công
-                        Toast.makeText(MainActivity.this, "Đã xóa sạch trí nhớ của AI!", Toast.LENGTH_SHORT).show();
-                    } else {
-                        // Xóa xịt thì báo lỗi
-                        Toast.makeText(MainActivity.this, "Lỗi: Đéo thể xóa được file lịch sử!", Toast.LENGTH_SHORT).show();
-                    }
+                if (historyFiles == null || historyFiles.length == 0) {
+                    Toast.makeText(MainActivity.this, "Lich su chat dang trong san roi sep!", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                int deleted = 0;
+                int failed = 0;
+                for (File historyFile : historyFiles) {
+                    if (historyFile.delete()) deleted++;
+                    else failed++;
+                }
+
+                if (failed == 0) {
+                    Toast.makeText(MainActivity.this, "Da xoa sach tri nho AI: " + deleted + " file", Toast.LENGTH_SHORT).show();
                 } else {
-                    // File không tồn tại tức là chat đang trống
-                    Toast.makeText(MainActivity.this, "Lịch sử chat đang trống sẵn rồi sếp!", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, "Loi: xoa " + deleted + " file, con loi " + failed + " file", Toast.LENGTH_SHORT).show();
                 }
             }
         });
         btnSave = findViewById(R.id.btn_save);
         btnClear = findViewById(R.id.btn_clear);
         btnResetPromt = findViewById(R.id.btn_reset_promt);
+        deviceIdEditText = findViewById(R.id.edit_device_id);
 
         // --- Bắt đầu Setup Dropdown ---
         apiKeyAutoComplete = findViewById(R.id.apiKeyAutoComplete);
@@ -146,6 +178,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         });
 
         loadSavedSelection();
+        loadSavedDeviceIdToUi();
 
         btnSave.setOnClickListener(this);
         btnClear.setOnClickListener(this);
@@ -162,11 +195,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         // 2. Media Projection Launcher
         mediaProjectionLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(), result -> {
-                    if (result.getResultCode() == Activity.RESULT_OK) {
+                    if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
                         sMediaProjectionResultCode = result.getResultCode();
                         sMediaProjectionData = result.getData();
 
-                        isMediaProjectionGranted = true;
+                        isMediaProjectionGranted = hasMediaProjectionToken();
                         hasShownPermissionDialog = false;
 
                         checkNextPermission();
@@ -268,14 +301,36 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         observer = new ActivityVisibilityObserver();
         getLifecycle().addObserver(observer);
         // --- THÊM ĐOẠN NÀY ĐỂ MỞ SOCKET TỰ ĐỘNG ---
-        android.content.SharedPreferences prefs = getSharedPreferences("QQ_PREFS", android.content.Context.MODE_PRIVATE);
-        String savedDeviceId = prefs.getString("saved_device_id", null);
-        if (savedDeviceId != null) {
+        android.content.SharedPreferences prefs = getSharedPreferences(RUNTIME_PREFS, android.content.Context.MODE_PRIVATE);
+        String savedDeviceId = prefs.getString(PREF_SAVED_DEVICE_ID, null);
+        if (isValidDeviceId(savedDeviceId)) {
+            savedDeviceId = savedDeviceId.trim();
+            StartAuto.deviceID = savedDeviceId;
             RemoteStreamManager.getInstance(this, savedDeviceId);
         }
 
         // Bắt đầu chuỗi kiểm tra quyền
-        checkDeviceOwner();
+        checkNextPermission();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (isRestartFromVolumeIntent(intent)) {
+            restartFromVolume = true;
+            SharedPreferences runtimePrefs = getSharedPreferences(RUNTIME_PREFS, Context.MODE_PRIVATE);
+            suppressAutoStartAfterVolume = intent.getBooleanExtra(PREF_SUPPRESS_AUTOSTART_AFTER_VOLUME, false)
+                    || runtimePrefs.getBoolean(PREF_SUPPRESS_AUTOSTART_AFTER_VOLUME, false);
+            getSharedPreferences(RUNTIME_PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("isForceStopped", false)
+                    .putBoolean(PREF_RESTART_FROM_VOLUME, false)
+                    .putBoolean(PREF_SUPPRESS_AUTOSTART_AFTER_VOLUME, false)
+                    .apply();
+            hasShownPermissionDialog = false;
+            checkNextPermission();
+        }
     }
 
     // ==========================================
@@ -292,12 +347,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void checkMediaProjection() {
-        if (!isMediaProjectionGranted) {
+        if (!hasMediaProjectionToken()) {
+            isMediaProjectionGranted = false;
             MediaProjectionManager mm = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
             if (mm != null) {
                 mediaProjectionLauncher.launch(mm.createScreenCaptureIntent());
             }
         } else {
+            isMediaProjectionGranted = true;
             checkNextPermission();
         }
     }
@@ -406,12 +463,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     public void checkNextPermission() {
         hasShownPermissionDialog = false;
-        if (!isDeviceOwnerGranted) {
-            checkDeviceOwner();
-        }
-        else if (!isAccessibilityEnabled) {
+        if (!isAccessibilityEnabled) {
             checkAccessibility();
-        } else if (!isMediaProjectionGranted) {
+        } else if (!isMediaProjectionGranted || !hasMediaProjectionToken()) {
             checkMediaProjection();
         } else if (!isNotificationPermissionGranted) {
             checkNotificationPermission();
@@ -542,6 +596,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private void startMainApplicationLogic() {
         // Xóa sạch các bộ đếm ngược cũ (nếu có) để tránh lỗi đếm lùi nhiều lần
         handler.removeCallbacks(onClickRegisterRunnable);
+        handler.removeCallbacks(restartFromVolumeRunnable);
+
+        if (restartFromVolume) {
+            restartFromVolume = false;
+            if (suppressAutoStartAfterVolume) {
+                suppressAutoStartAfterVolume = false;
+                isOnClickRegisterCalled = false;
+                Toast.makeText(this, "Da khoi dong lai tool, bam Start de chay tiep.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            handler.postDelayed(restartFromVolumeRunnable, 1500);
+            Toast.makeText(this, "Dang khoi dong lai tool...", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
         // Bắt đầu đếm đúng 60s (60000ms)
         handler.postDelayed(onClickRegisterRunnable, 60000);
@@ -589,6 +657,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     };
 
+    private final Runnable restartFromVolumeRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (StartAuto.isToolRunning || StartAuto.isUpdating) {
+                finishAffinity();
+                return;
+            }
+            isOnClickRegisterCalled = true;
+            startAutoServiceWithMediaProjection();
+        }
+    };
+
     public void onClickRegister(View view) {
         // HỦY DIỆT CÁI ĐỒNG HỒ ĐẾM NGƯỢC 60S NGAY LẬP TỨC
         handler.removeCallbacks(onClickRegisterRunnable);
@@ -607,8 +687,32 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     // =========================================================
     private void startAutoServiceWithMediaProjection() {
         // Fix: Method invocation 'toString' may produce 'NullPointerException'
-        apiKeyServer = selectedApiKey;
+        String deviceId = saveDeviceIdFromUi(true);
+        if (TextUtils.isEmpty(deviceId)) {
+            return;
+        }
+
+        if (!hasMediaProjectionToken()) {
+            isMediaProjectionGranted = false;
+            restartFromVolume = true;
+            suppressAutoStartAfterVolume = false;
+            hasShownPermissionDialog = false;
+            Toast.makeText(this, "Can cap lai quyen screencast...", Toast.LENGTH_SHORT).show();
+            checkMediaProjection();
+            return;
+        }
+
+        apiKeyServer = resolveSelectedApiKey();
         if (!TextUtils.isEmpty(apiKeyServer)) {
+            editor.putString(PREF_SAVED_API_KEY, apiKeyServer);
+            editor.apply();
+            getSharedPreferences(RUNTIME_PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("isForceStopped", false)
+                    .putBoolean(PREF_RESTART_FROM_VOLUME, false)
+                    .putBoolean(PREF_SUPPRESS_AUTOSTART_AFTER_VOLUME, false)
+                    .putString(PREF_SAVED_DEVICE_ID, deviceId)
+                    .apply();
             // 1. Cài đặt thông số giao diện cho Notification của HSQService
             com.quayquay.hsq.config.HSQUiParams uiParams = new com.quayquay.hsq.config.HSQUiParams(
                     "SHTools",
@@ -620,6 +724,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             // 2. Tạo xe rùa (Intent) để chở dữ liệu sang StartAuto
             Intent serviceIntent = new Intent(MainActivity.this, StartAuto.class);
             serviceIntent.putExtra("api_key", apiKeyServer);
+            serviceIntent.putExtra("device_id", deviceId);
 
             // 3. Ném chìa khóa chụp màn hình lên xe rùa!
             if (sMediaProjectionData != null) {
@@ -628,6 +733,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             }
 
             // 4. Kích hoạt Service (Không cần check version O vì minSdk là 28)
+            RemoteStreamManager.getInstance(this, deviceId).retryStream();
             startForegroundService(serviceIntent);
 
             finishAffinity();
@@ -638,6 +744,53 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     .setPositiveButton("OK", null)
                     .show();
         }
+    }
+
+    private void loadSavedDeviceIdToUi() {
+        String savedDeviceId = getSharedPreferences(RUNTIME_PREFS, Context.MODE_PRIVATE)
+                .getString(PREF_SAVED_DEVICE_ID, "");
+        if (isValidDeviceId(savedDeviceId)) {
+            savedDeviceId = savedDeviceId.trim();
+            if (deviceIdEditText != null) {
+                deviceIdEditText.setText(savedDeviceId);
+            }
+            StartAuto.deviceID = savedDeviceId;
+        }
+    }
+
+    private String resolveSelectedApiKey() {
+        if (!TextUtils.isEmpty(selectedApiKey)) {
+            return selectedApiKey.trim();
+        }
+        String savedKey = sharedPreferences.getString(PREF_SAVED_API_KEY, "");
+        return savedKey == null ? "" : savedKey.trim();
+    }
+
+    private String saveDeviceIdFromUi(boolean showDialog) {
+        String deviceId = deviceIdEditText == null ? "" : deviceIdEditText.getText().toString().trim();
+        if (!isValidDeviceId(deviceId)) {
+            if (showDialog) {
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Loi")
+                        .setMessage("Chua co Device ID hop le. Nhap Device ID roi bam SAVE/Register lai.")
+                        .setPositiveButton("OK", null)
+                        .show();
+            }
+            return "";
+        }
+
+        getSharedPreferences(RUNTIME_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_SAVED_DEVICE_ID, deviceId)
+                .apply();
+        StartAuto.deviceID = deviceId;
+        return deviceId;
+    }
+
+    private boolean isValidDeviceId(String deviceId) {
+        if (deviceId == null) return false;
+        String clean = deviceId.trim();
+        return !clean.isEmpty() && !"UNKNOWN".equalsIgnoreCase(clean);
     }
 
     private void checkDeviceOwner() {
@@ -694,17 +847,19 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     public void onClick(View view) {
         if (view == btnSave) {
-            if (!selectedApiKey.isEmpty()) {
-                editor.putString("SAVED_API_KEY", selectedApiKey);
+            String deviceId = saveDeviceIdFromUi(false);
+            String apiKey = resolveSelectedApiKey();
+            if (!apiKey.isEmpty() && !TextUtils.isEmpty(deviceId)) {
+                editor.putString(PREF_SAVED_API_KEY, apiKey);
                 editor.commit(); // Dùng commit() theo code cũ của sếp
-                Toast.makeText(this, "Đã lưu API Key thành công!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Da luu API Key va Device ID!", Toast.LENGTH_SHORT).show();
             } else {
-                Toast.makeText(this, "Vui lòng chọn một tài khoản từ danh sách", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Vui long chon API Key va nhap Device ID", Toast.LENGTH_SHORT).show();
             }
         } else if (view == btnClear) {
             apiKeyAutoComplete.setText("", false);
             selectedApiKey = "";
-            editor.remove("SAVED_API_KEY");
+            editor.remove(PREF_SAVED_API_KEY);
             editor.commit();
         }
     }
@@ -720,6 +875,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onDestroy();
         // Thoát app là hủy luôn bộ đếm
         handler.removeCallbacks(onClickRegisterRunnable);
+        handler.removeCallbacks(restartFromVolumeRunnable);
     }
     // ==========================================
     // CÁC HÀM XỬ LÝ DROPDOWN VÀ JSON
@@ -755,10 +911,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private void migrateOldApiKey() {
         String oldApiKey = sharedPreferences.getString("DATA", null);
-        if (oldApiKey != null && !sharedPreferences.contains("SAVED_API_KEY")) {
+        if (oldApiKey != null && !sharedPreferences.contains(PREF_SAVED_API_KEY)) {
             for (ApiKeyItem item : apiKeyList) {
                 if (item.getApiKey().equals(oldApiKey)) {
-                    editor.putString("SAVED_API_KEY", item.getApiKey());
+                    editor.putString(PREF_SAVED_API_KEY, item.getApiKey());
                     editor.remove("DATA");
                     editor.apply();
                     return;
@@ -768,7 +924,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void loadSavedSelection() {
-        String savedKey = sharedPreferences.getString("SAVED_API_KEY", null);
+        String savedKey = sharedPreferences.getString(PREF_SAVED_API_KEY, null);
         if (savedKey != null) {
             for (ApiKeyItem item : apiKeyList) {
                 if (item.getApiKey().equals(savedKey)) {

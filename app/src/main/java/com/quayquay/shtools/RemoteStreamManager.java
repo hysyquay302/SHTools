@@ -19,6 +19,7 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.net.URISyntaxException;
 
+import com.quayquay.hsq.extention.VolumeObserver;
 import com.quayquay.hsq.tools.HSQDevice;
 import com.quayquay.hsq.tools.HSQService;
 import com.quayquay.hsq.tools.HSQServiceManager;
@@ -47,11 +48,27 @@ public class RemoteStreamManager {
     // URL Cloudflare của anh
     private static final String SERVER_URL = "https://quaykute.id.vn";
 
-    public static RemoteStreamManager getInstance(Context context, String deviceId) {
-        if (instance == null) {
-            instance = new RemoteStreamManager(context.getApplicationContext(), deviceId);
+    public static synchronized RemoteStreamManager getInstance(Context context, String deviceId) {
+        String cleanDeviceId = deviceId == null ? "" : deviceId.trim();
+        if (cleanDeviceId.isEmpty() || "UNKNOWN".equalsIgnoreCase(cleanDeviceId)) {
+            android.util.Log.w(TAG, "Bo qua socket vi Device ID khong hop le: " + deviceId);
+            return instance;
+        }
+
+        if (instance == null || !cleanDeviceId.equals(instance.deviceId)) {
+            if (instance != null) {
+                instance.release();
+            }
+            instance = new RemoteStreamManager(context.getApplicationContext(), cleanDeviceId);
         }
         return instance;
+    }
+
+    public static synchronized void releaseInstance() {
+        if (instance != null) {
+            instance.release();
+            instance = null;
+        }
     }
 
     private RemoteStreamManager(Context context, String deviceId) {
@@ -257,8 +274,22 @@ public class RemoteStreamManager {
         context.stopService(new android.content.Intent(context, com.quayquay.shtools.services.StreamService.class));
     }
 
+    private synchronized void release() {
+        stopStream();
+        try {
+            if (mSocket != null) {
+                mSocket.off();
+                mSocket.disconnect();
+                mSocket = null;
+            }
+        } catch (Exception e) {
+            android.util.Log.w(TAG, "Loi dong socket cu: " + e.getMessage());
+        }
+    }
+
     private void handleVolumeCommand(String type) {
         AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        VolumeObserver.ignoreChangesFor(1500);
         if ("UP".equals(type)) {
             audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0);
         } else if ("DOWN".equals(type)) {

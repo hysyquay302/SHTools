@@ -1088,6 +1088,80 @@ public class ASBLBridgeService extends Service {
         return scrollMainScrollable(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD);
     }
 
+    public static boolean scrollScrollableInBounds(boolean forward, int left, int top, int right, int bottom) {
+        int action = forward ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD;
+        AccessibilityNodeInfo root = null;
+        AccessibilityNodeInfo bestNode = null;
+        try {
+            root = asblService.getRootInActiveWindow();
+            List<AccessibilityNodeInfo> scrollables = findScrollables(root, action);
+            Rect target = new Rect(left, top, right, bottom);
+            int bestScore = Integer.MIN_VALUE;
+
+            for (AccessibilityNodeInfo node : scrollables) {
+                if (node == null) continue;
+                Rect bounds = new Rect();
+                node.getBoundsInScreen(bounds);
+                if (bounds.width() < 120 || bounds.height() < 120) {
+                    try { node.recycle(); } catch (Exception ignored) {}
+                    continue;
+                }
+
+                Rect intersection = new Rect(bounds);
+                boolean intersects = intersection.intersect(target);
+                int intersectionArea = intersects ? intersection.width() * intersection.height() : 0;
+                int nodeArea = bounds.width() * bounds.height();
+                int centerPenalty = Math.abs(bounds.centerX() - target.centerX()) / 3 + Math.abs(bounds.centerY() - target.centerY()) / 6;
+                int edgePenalty = (bounds.left <= 0 && bounds.right >= widthOfScreen) ? 250000 : 0;
+                int score = intersectionArea * 3 + nodeArea / 8 - centerPenalty - edgePenalty;
+
+                if (score > bestScore) {
+                    if (bestNode != null) {
+                        try { bestNode.recycle(); } catch (Exception ignored) {}
+                    }
+                    bestNode = node;
+                    bestScore = score;
+                } else {
+                    try { node.recycle(); } catch (Exception ignored) {}
+                }
+            }
+
+            if (bestNode != null) {
+                boolean ok = bestNode.performAction(action);
+                LOG.I(TAG, "scrollScrollableInBounds " + (forward ? "forward" : "backward") + " ok=" + ok);
+                return ok;
+            }
+        } catch (Exception e) {
+            LOG.E(TAG, "scrollScrollableInBounds: " + e);
+        } finally {
+            if (bestNode != null) {
+                try { bestNode.recycle(); } catch (Exception ignored) {}
+            }
+            if (root != null) {
+                try { root.recycle(); } catch (Exception ignored) {}
+            }
+        }
+        return false;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    public static boolean swipeStraight(int x1, int y1, int x2, int y2, int delay) {
+        LOG.I(TAG, String.format("swipeStraight from [%d,%d] to [%d,%d]", x1, y1, x2, y2));
+        try {
+            Path path = new Path();
+            path.moveTo(x1, y1);
+            path.lineTo(x2, y2);
+            GestureDescription.Builder gestureBuilder = new GestureDescription.Builder();
+            gestureBuilder.addStroke(new GestureDescription.StrokeDescription(path, 0, Math.max(120, delay)));
+            boolean res = asblService.dispatchGesture(gestureBuilder.build(), null, null);
+            sleep(Math.max(120, delay));
+            return res;
+        } catch (Exception e) {
+            LOG.printStackTrace(TAG, e);
+            return false;
+        }
+    }
+
     public static List<CharSequence> collectContentDescriptions () {
         List<CharSequence> contentDescriptions = new ArrayList<>();
         List<AccessibilityNodeInfo> node = getAllNodesOnScreen();
