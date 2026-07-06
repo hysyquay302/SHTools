@@ -3,6 +3,7 @@ package com.quayquay.shtools;
 import static com.quayquay.shtools.extention.ASUtils.delay;
 import static com.quayquay.shtools.services.ASBLBridgeService.clearrecents;
 import static com.quayquay.shtools.services.ASBLBridgeService.findAndClickByTextDes;
+import static com.quayquay.shtools.services.ASBLBridgeService.findMultiTextDes;
 import static com.quayquay.shtools.services.ASBLBridgeService.globalBack;
 import static com.quayquay.shtools.services.ASBLBridgeService.globalHome;
 
@@ -954,7 +955,7 @@ public class StartAuto extends HSQService
                                     {
                                         ASBLBridgeService.showPowerDialog();
                                         delay(2000);
-                                        findAndClickByTextDes("reboot", true, true, true, false, 10);
+                                        findMultiTextDes(10, true, true, true, false, "reboot", "restart");
                                     }
                                 }
                                 else
@@ -970,7 +971,7 @@ public class StartAuto extends HSQService
                                         {
                                             ASBLBridgeService.showPowerDialog();
                                             delay(2000);
-                                            findAndClickByTextDes("reboot", true, true, true, false, 10);
+                                            findMultiTextDes(10, true, true, true, false, "reboot", "restart");
                                         }
                                     }
                                     else
@@ -1142,7 +1143,7 @@ public class StartAuto extends HSQService
                                                     {
                                                         ASBLBridgeService.showPowerDialog();
                                                         delay(2000);
-                                                        findAndClickByTextDes("reboot", true, true, true, false, 10);
+                                                        findMultiTextDes(10, true, true, true, false, "reboot", "restart");
                                                     }
                                                 }
                                                 else
@@ -6099,7 +6100,7 @@ public class StartAuto extends HSQService
                 // 🌟 TẦNG 2.2: LƯỚI QUÉT TIÊU CHUẨN (MẮT THẦN OCR)
                 if (shouldPreferPageNavigationXml)
                 {
-                    int navAction = tryClickPageNavigationFromXml(step, smartList, slVuot, navRevealSwipeCount < 3);
+                    int navAction = tryClickPageNavigationFromXml(step, smartList, slVuot, navRevealSwipeCount < 8);
                     if (navAction == 1)
                     {
                         break checkButtonAgainLoop;
@@ -6502,6 +6503,7 @@ public class StartAuto extends HSQService
             android.graphics.Rect bestRect = null;
             String bestLabel = "";
             boolean bestClipped = false;
+            boolean bestRevealOnly = false;
             int bestScore = Integer.MIN_VALUE;
 
             for (int i = 0; i < nodes.getLength(); i++)
@@ -6535,7 +6537,8 @@ public class StartAuto extends HSQService
                 android.graphics.Rect ancestorVisibleRect = getVisibleRectInsideXmlAncestors(node, r);
                 int ancestorVisibleHeight = Math.max(0, ancestorVisibleRect.bottom - ancestorVisibleRect.top);
                 boolean clippedByXmlAncestor = ancestorVisibleHeight < 24 || r.centerY() < ancestorVisibleRect.top || r.centerY() > ancestorVisibleRect.bottom;
-                boolean clipped = r.height() < 24 || (r.bottom >= heightOfScreen - 80 && r.height() < 80) || r.centerY() >= heightOfScreen - 40 || clippedByBottomOverlay || clippedByXmlAncestor;
+                boolean revealOnly = isXmlNavRectTooClippedToClick(r, bottomOverlayTop, ancestorVisibleRect);
+                boolean clipped = revealOnly || r.height() < 24 || (r.bottom >= heightOfScreen - 80 && r.height() < 80) || r.centerY() >= heightOfScreen - 40 || clippedByBottomOverlay || clippedByXmlAncestor;
                 boolean navOnlyReveal = navId && !nextText && clipped;
                 if (!nextText && !navOnlyReveal) continue;
 
@@ -6571,6 +6574,7 @@ public class StartAuto extends HSQService
                     bestRect = r;
                     bestLabel = rawFullText.isEmpty() ? resId : rawFullText;
                     bestClipped = clipped;
+                    bestRevealOnly = revealOnly;
                 }
             }
 
@@ -6594,12 +6598,24 @@ public class StartAuto extends HSQService
                         return 2;
                     }
 
+                    if (bestRevealOnly)
+                    {
+                        updateNotificationContent("XML Nav: nut [" + bestLabel + "] van chua co vung bam that, tiep tuc vuot");
+                        return 2;
+                    }
+
                     updateNotificationContent("XML Nav: da cham day, thu bam nut [" + bestLabel + "]");
                 }
                 else
                 {
                     updateNotificationContent("XML Nav: het luot reveal, thu bam nut [" + bestLabel + "]");
                 }
+            }
+
+            if (bestRevealOnly)
+            {
+                updateNotificationContent("XML Nav: bo qua nut [" + bestLabel + "] vi dang bi kep/height 0");
+                return 0;
             }
 
             int clickX = Math.max(24, Math.min(widthOfScreen - 24, bestRect.centerX()));
@@ -6627,6 +6643,30 @@ public class StartAuto extends HSQService
         {
             return 0;
         }
+    }
+
+    private boolean isXmlNavRectTooClippedToClick(android.graphics.Rect r, int bottomOverlayTop, android.graphics.Rect ancestorVisibleRect)
+    {
+        if (r == null) return true;
+
+        int visibleTop = Math.max(181, r.top);
+        int visibleBottom = r.bottom;
+        if (bottomOverlayTop > 0)
+        {
+            visibleBottom = Math.min(visibleBottom, bottomOverlayTop - 8);
+        }
+        if (ancestorVisibleRect != null)
+        {
+            visibleTop = Math.max(visibleTop, ancestorVisibleRect.top);
+            visibleBottom = Math.min(visibleBottom, ancestorVisibleRect.bottom);
+        }
+
+        int visibleHeight = Math.max(0, visibleBottom - visibleTop);
+        if (r.width() < 30 || r.height() < 30) return true;
+        if (visibleHeight < 30) return true;
+        if (r.top >= heightOfScreen - 120) return true;
+        if (r.centerY() >= heightOfScreen - 60) return true;
+        return r.bottom >= heightOfScreen - 16 && visibleHeight < 60;
     }
 
     private android.graphics.Rect getVisibleRectInsideXmlAncestors(org.w3c.dom.Element node, android.graphics.Rect childRect)
