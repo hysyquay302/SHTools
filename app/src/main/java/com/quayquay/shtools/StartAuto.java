@@ -105,6 +105,7 @@ public class StartAuto extends HSQService
     @SuppressLint("SdCardPath")
     private final String imagePath = "/sdcard/Pictures/ImageChat";
     private String pathInfoProfileSaved;
+    private RegistrationInfo activeInfoProfile = null;
     private String surveyBriefMemory = "";
     private String surveyBriefFingerprint = "";
     private android.graphics.Rect activeDropdownSwipeBounds = null;
@@ -247,6 +248,7 @@ public class StartAuto extends HSQService
             String directionPath = "/sdcard/Servey/direction.json";
             pathInfoProfileSaved = "/sdcard/Servey/sv_" + deviceID + ".json";
             RegistrationInfo InfoProfile = new RegistrationInfo();
+            activeInfoProfile = InfoProfile;
             String profileData = "";
             Instant startTime = Instant.now();
 
@@ -290,6 +292,7 @@ public class StartAuto extends HSQService
                                 // 2. Gson tương đương MissingMemberHandling.Ignore của Newtonsoft
                                 Gson gson = new GsonBuilder().create();
                                 InfoProfile = gson.fromJson(profileData, RegistrationInfo.class);
+                                activeInfoProfile = InfoProfile;
 
                                 break;
                             }
@@ -1403,6 +1406,7 @@ public class StartAuto extends HSQService
                                                     // FIX CHÍ MẠNG: Dùng chuẩn Regex của C# đéo thêm bớt chữ nào!
                                                     String[] splitStep = java.util.Arrays.stream(validSplits.get(2).split(";(?![^{]*\\})"))
                                                             .filter(s -> s != null && !s.trim().isEmpty()).toArray(String[]::new);
+                                                    boolean checkAutoAdvanceAfterChoice = shouldCheckAutoAdvanceAfterChoice(splitStep);
 
                                                     int totalClickToTextSteps = 0;
                                                     for (String rawStep : splitStep)
@@ -1419,8 +1423,9 @@ public class StartAuto extends HSQService
                                                     
                                                     clickToTextMinY = 0; // Reset Y limit cho mỗi vòng trả lời mới
 
-                                                    for (String s : splitStep)
+                                                    for (int stepIndex = 0; stepIndex < splitStep.length; stepIndex++)
                                                     {
+                                                        String s = splitStep[stepIndex];
                                                         step = s;
                                                         phoneScreen.clear();
                                                         if (!step.contains("clicktotext") && !step.contains("clickbutton"))
@@ -1429,6 +1434,11 @@ public class StartAuto extends HSQService
                                                             phoneScreen.add(new TextBlock("Đã vuốt xuống", 0, 0));
                                                         }
                                                         updateNotificationContent("thực hiện: " + step);
+                                                        List<TextBlock> beforeAutoAdvanceChoice = null;
+                                                        if (checkAutoAdvanceAfterChoice && stepIndex == 0)
+                                                        {
+                                                            beforeAutoAdvanceChoice = readAutoAdvanceScreenProbe();
+                                                        }
                                                         if (step.contains("clicktotext"))
                                                         {
                                                             Matcher match = Pattern.compile("\\{([^{}]+)\\}").matcher(step);
@@ -1461,6 +1471,12 @@ public class StartAuto extends HSQService
                                                                 }
 
                                                                 successClickToTextSteps++;
+                                                                if (checkAutoAdvanceAfterChoice && stepIndex == 0 && didChoiceAutoAdvanceScreen(beforeAutoAdvanceChoice))
+                                                                {
+                                                                    updateNotificationContent("Click dap an da doi man, bo qua next di kem");
+                                                                    currentState = STATE_GET_ANSWER;
+                                                                    continue stateMachine;
+                                                                }
                                                             }
                                                         }
                                                         else if (step.contains("clickbutton"))
@@ -3140,8 +3156,8 @@ public class StartAuto extends HSQService
                             delay(2000);
                             while (true)
                             {
-                                int checkInstall = ASBLBridgeService.findMultiTextDesWindow(60, true, true, true, false, "install", "there was a problem parsing the package");
-                                if (checkInstall == 2 || checkInstall == 0)
+                                int checkInstall = tapApkInstallerStartButton(60);
+                                if (checkInstall <= 0)
                                 {
                                     updateNotificationContent("Lỗi cài apk " + tryReinstall);
                                     if (tryReinstall < 3)
@@ -3161,7 +3177,7 @@ public class StartAuto extends HSQService
                             delay(3000);
                             while (true)
                             {
-                                int checkInstall = ASBLBridgeService.findMultiTextDesWindow(360, true, true, true, false, "decline", "done");
+                                int checkInstall = waitApkInstallerCompletionSignal(360);
                                 if (checkInstall == 1)
                                 {
                                     delay(5000);
@@ -3197,8 +3213,8 @@ public class StartAuto extends HSQService
                                 delay(2000);
                                 while (true)
                                 {
-                                    int checkInstall = ASBLBridgeService.findMultiTextDesWindow(60, true, true, true, false, "install", "there was a problem parsing the package");
-                                    if (checkInstall == 2 || checkInstall == 0)
+                                    int checkInstall = tapApkInstallerStartButton(60);
+                                    if (checkInstall <= 0)
                                     {
                                         updateNotificationContent("Lỗi cài apk " + tryReinstall);
                                         if (tryReinstall < 3)
@@ -3219,7 +3235,7 @@ public class StartAuto extends HSQService
 
                                 while (true)
                                 {
-                                    int checkInstall = ASBLBridgeService.findMultiTextDesWindow(360, true, true, true, false, "decline", "done");
+                                    int checkInstall = waitApkInstallerCompletionSignal(360);
                                     if (checkInstall == 1)
                                     {
                                         delay(5000);
@@ -3249,8 +3265,8 @@ public class StartAuto extends HSQService
                                     delay(2000);
                                     while (true)
                                     {
-                                        int checkInstall = ASBLBridgeService.findMultiTextDesWindow(60, true, true, true, false, "install", "there was a problem parsing the package");
-                                        if (checkInstall == 2 || checkInstall == 0)
+                                        int checkInstall = tapApkInstallerStartButton(60);
+                                        if (checkInstall <= 0)
                                         {
                                             updateNotificationContent("Lỗi cài apk " + tryReinstall);
                                             if (tryReinstall < 3)
@@ -3271,7 +3287,7 @@ public class StartAuto extends HSQService
 
                                     while (true)
                                     {
-                                        int checkInstall = ASBLBridgeService.findMultiTextDesWindow(360, true, true, true, false, "decline", "done");
+                                        int checkInstall = waitApkInstallerCompletionSignal(360);
                                         if (checkInstall == 1)
                                         {
                                             delay(5000);
@@ -3296,6 +3312,53 @@ public class StartAuto extends HSQService
             }
         }
         return true;
+    }
+
+    private int tapApkInstallerStartButton(int timeoutSeconds)
+    {
+        int result = ASBLBridgeService.findMultiTextDesWindow(
+                timeoutSeconds,
+                true,
+                true,
+                true,
+                false,
+                "there was a problem parsing the package",
+                "there was a problem parsing the package.",
+                "app not installed",
+                "package installer keeps stopping",
+                "install",
+                "update",
+                "install anyway",
+                "update anyway",
+                "cài đặt",
+                "cập nhật",
+                "vẫn cài đặt",
+                "vẫn cập nhật",
+                "cai dat",
+                "cap nhat"
+        );
+
+        if (result >= 1 && result <= 4) return -1;
+        return result > 0 ? 1 : 0;
+    }
+
+    private int waitApkInstallerCompletionSignal(int timeoutSeconds)
+    {
+        return ASBLBridgeService.findMultiTextDesWindow(
+                timeoutSeconds,
+                true,
+                true,
+                true,
+                false,
+                "decline",
+                "done",
+                "open",
+                "xong",
+                "mở",
+                "mo",
+                "hoàn tất",
+                "hoan tat"
+        );
     }
 
     @SuppressLint("SdCardPath")
@@ -4799,6 +4862,61 @@ public class StartAuto extends HSQService
         return list;
     }
 
+    private boolean shouldCheckAutoAdvanceAfterChoice(String[] splitStep)
+    {
+        if (splitStep == null || splitStep.length != 2) return false;
+        return isAutoAdvanceChoiceStep(splitStep[0]) && isTrailingPageNextButton(splitStep[1]);
+    }
+
+    private boolean isAutoAdvanceChoiceStep(String step)
+    {
+        if (step == null) return false;
+        String lower = step.toLowerCase(Locale.ROOT);
+        return lower.contains("clicktotext")
+                || lower.contains("click_block")
+                || lower.contains("click_index")
+                || lower.contains("matrix_click");
+    }
+
+    private boolean isTrailingPageNextButton(String step)
+    {
+        if (step == null) return false;
+        String lower = step.toLowerCase(Locale.ROOT);
+        if (!lower.contains("clickbutton")) return false;
+        return lower.contains("next")
+                || lower.contains("continue")
+                || lower.contains("submit")
+                || lower.contains("tiep")
+                || lower.contains("tiếp")
+                || lower.contains("hoan")
+                || lower.contains("hoàn")
+                || lower.contains("xong");
+    }
+
+    private List<TextBlock> readAutoAdvanceScreenProbe()
+    {
+        try
+        {
+            return getCheckAnswerSmart().stream()
+                    .filter(x -> x.y > 180)
+                    .sorted(Comparator.comparingInt((TextBlock x) -> x.y).thenComparingInt(x -> x.x))
+                    .collect(Collectors.toList());
+        }
+        catch (Exception ignored)
+        {
+            return new ArrayList<>();
+        }
+    }
+
+    private boolean didChoiceAutoAdvanceScreen(List<TextBlock> before)
+    {
+        if (before == null || before.isEmpty()) return false;
+        delay(1200);
+        List<TextBlock> after = readAutoAdvanceScreenProbe();
+        if (after.isEmpty()) return false;
+        return !HSQTools.areAlmostSame(before, after, 20);
+    }
+
     /**
      * Tìm tọa độ các ô có khả năng là Checkbox/Radio trong file XML Dump
      */
@@ -5892,6 +6010,201 @@ public class StartAuto extends HSQService
         int b = android.graphics.Color.blue(color);
         return g >= 90 && r <= 80 && b <= 140 && g >= r + 45 && g >= b + 15;
     }
+
+    private static final class DobInputTarget
+    {
+        final org.w3c.dom.Element node;
+        final android.graphics.Rect rect;
+
+        DobInputTarget(org.w3c.dom.Element node, android.graphics.Rect rect)
+        {
+            this.node = node;
+            this.rect = rect;
+        }
+    }
+
+    private boolean tryRepairDobTripleInputsBeforeNext()
+    {
+        RegistrationInfo profile = activeInfoProfile;
+        if (profile == null) return false;
+
+        int month = profile.getMonthOfBirth();
+        int day = profile.getDayOfBirth();
+        int year = profile.getYearOfBirth();
+        if (month <= 0 || month > 12 || day <= 0 || day > 31 || year < 1900 || year > 2100) return false;
+
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.isEmpty()) return false;
+
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            DobInputTarget monthInput = findDobInputTarget(nodes, "month");
+            DobInputTarget dayInput = findDobInputTarget(nodes, "day");
+            DobInputTarget yearInput = findDobInputTarget(nodes, "year");
+            if (monthInput == null || dayInput == null || yearInput == null) return false;
+            if (!looksLikeDobTripleInputScreen(nodes, monthInput, dayInput, yearInput)) return false;
+
+            boolean changed = false;
+            changed |= fillDobInputIfNeeded(monthInput, String.valueOf(month), "month");
+            changed |= fillDobInputIfNeeded(dayInput, String.valueOf(day), "day");
+            changed |= fillDobInputIfNeeded(yearInput, String.valueOf(year), "year");
+            if (changed)
+            {
+                updateNotificationContent("DOB 3 o: da bo sung field con thieu");
+                delay(1200);
+            }
+            return changed;
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+    }
+
+    private DobInputTarget findDobInputTarget(org.w3c.dom.NodeList nodes, String key)
+    {
+        DobInputTarget byId = null;
+        DobInputTarget byLabel = null;
+        android.graphics.Rect bestLabel = null;
+        String keyNorm = normalizeDobText(key);
+
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+            String clazz = node.getAttribute("class");
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+            if (r == null || r.height() <= 10 || r.centerY() <= 180 || r.centerY() >= heightOfScreen - 80) continue;
+
+            String meta = normalizeDobText(node.getAttribute("resource-id") + " " + node.getAttribute("text") + " " + node.getAttribute("content-desc"));
+            if (isDobEditClass(clazz))
+            {
+                if (meta.equals(keyNorm) || meta.endsWith(keyNorm) || meta.contains(keyNorm))
+                {
+                    byId = new DobInputTarget(node, r);
+                    break;
+                }
+            }
+            else
+            {
+                String visible = normalizeDobText(node.getAttribute("text") + " " + node.getAttribute("content-desc"));
+                if (visible.equals(keyNorm))
+                {
+                    if (bestLabel == null || r.height() < bestLabel.height()) bestLabel = r;
+                }
+            }
+        }
+
+        if (byId != null) return byId;
+        if (bestLabel == null) return null;
+
+        int bestScore = Integer.MAX_VALUE;
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+            if (!isDobEditClass(node.getAttribute("class"))) continue;
+
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+            if (r == null || r.height() <= 10 || r.centerY() <= 180 || r.centerY() >= heightOfScreen - 80) continue;
+            int below = r.top - bestLabel.bottom;
+            boolean sameColumn = r.centerX() >= bestLabel.left - 80 && r.centerX() <= bestLabel.right + 80;
+            if (!sameColumn || below < -80 || below > 360) continue;
+
+            int score = Math.abs(below) + Math.abs(r.centerX() - bestLabel.centerX());
+            if (score < bestScore)
+            {
+                bestScore = score;
+                byLabel = new DobInputTarget(node, r);
+            }
+        }
+        return byLabel;
+    }
+
+    private boolean looksLikeDobTripleInputScreen(org.w3c.dom.NodeList nodes, DobInputTarget monthInput, DobInputTarget dayInput, DobInputTarget yearInput)
+    {
+        boolean hasMonthLabel = false;
+        boolean hasDayLabel = false;
+        boolean hasYearLabel = false;
+        StringBuilder all = new StringBuilder();
+
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+            String visible = normalizeDobText(node.getAttribute("text") + " " + node.getAttribute("content-desc"));
+            String meta = normalizeDobText(node.getAttribute("resource-id") + " " + node.getAttribute("text") + " " + node.getAttribute("content-desc"));
+            all.append(meta).append(' ');
+            if (visible.equals("month") || meta.equals("month")) hasMonthLabel = true;
+            if (visible.equals("day") || meta.equals("day")) hasDayLabel = true;
+            if (visible.equals("year") || meta.equals("year")) hasYearLabel = true;
+        }
+
+        String screen = all.toString();
+        boolean dobQuestion = screen.contains("whenwereyouborn")
+                || screen.contains("dateofbirth")
+                || screen.contains("birthdate")
+                || screen.contains("birthday")
+                || screen.contains("ngaysinh")
+                || screen.contains("dob")
+                || screen.contains("born");
+        boolean allLabels = hasMonthLabel && hasDayLabel && hasYearLabel;
+        boolean alignedInputs = Math.abs(monthInput.rect.centerY() - dayInput.rect.centerY()) <= 80
+                && Math.abs(dayInput.rect.centerY() - yearInput.rect.centerY()) <= 80
+                && monthInput.rect.centerX() < dayInput.rect.centerX()
+                && dayInput.rect.centerX() < yearInput.rect.centerX();
+        boolean expiryTrap = screen.contains("expiry") || screen.contains("expiration") || screen.contains("cardnumber") || screen.contains("creditcard");
+        return alignedInputs && !expiryTrap && (dobQuestion || allLabels);
+    }
+
+    private boolean fillDobInputIfNeeded(DobInputTarget target, String value, String part)
+    {
+        if (target == null || target.rect == null) return false;
+        String current = target.node.getAttribute("text");
+        if (!needsDobInputValue(current, value, "year".equals(part))) return false;
+
+        click(target.rect.centerX(), target.rect.centerY(), false);
+        delay(900);
+        clearAllText();
+        delay(300);
+        inputText(value, null, true);
+        delay(700);
+        globalBack();
+        delay(500);
+        return true;
+    }
+
+    private boolean needsDobInputValue(String current, String expected, boolean year)
+    {
+        String curDigits = current == null ? "" : current.replaceAll("\\D", "");
+        String expDigits = expected == null ? "" : expected.replaceAll("\\D", "");
+        if (expDigits.isEmpty()) return false;
+        if (curDigits.isEmpty()) return true;
+        if (year) return !curDigits.equals(expDigits);
+        return !trimLeadingZeroes(curDigits).equals(trimLeadingZeroes(expDigits));
+    }
+
+    private String trimLeadingZeroes(String value)
+    {
+        if (value == null) return "";
+        String clean = value.replaceFirst("^0+(?!$)", "");
+        return clean.isEmpty() ? "0" : clean;
+    }
+
+    private boolean isDobEditClass(String clazz)
+    {
+        if (clazz == null) return false;
+        return clazz.contains("EditText") || clazz.contains("AutoCompleteTextView");
+    }
+
+    private String normalizeDobText(String input)
+    {
+        if (input == null) return "";
+        return HSQTools.getOnlyTextLinq(HSQTools.normalizeText(input)).toLowerCase(Locale.ROOT);
+    }
+
     private boolean shouldBlockClickButtonOnUnfinishedPicker(List<TextBlock> visibleBlocks)
     {
         try
@@ -5961,6 +6274,7 @@ public class StartAuto extends HSQService
     {
         int slVuot = 0;
         int navRevealSwipeCount = 0;
+        int dobRepairAttempt = 0;
         String currentXml = "";
 
         Matcher matchBtn = java.util.regex.Pattern.compile("\\{([^{}]+)\\}").matcher(step);
@@ -5988,6 +6302,11 @@ public class StartAuto extends HSQService
                 List<HSQTools.TextBlock> smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
                 phoneScreen.addAll(smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
                 phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
+                if (isNextIntent && dobRepairAttempt < 2 && tryRepairDobTripleInputsBeforeNext())
+                {
+                    dobRepairAttempt++;
+                    continue;
+                }
                 if (isNextIntent && shouldBlockClickButtonOnUnfinishedPicker(smartList))
                 {
                     updateNotificationContent("Chan clickbutton: dropdown/DOB chua hoan tat");
@@ -6083,11 +6402,17 @@ public class StartAuto extends HSQService
                         {
                             updateNotificationContent("Đồng hóa Next: Bắt sống NÚT ẢNH TRỐNG XỊN tại " + bestBlankBtn.centerX() + "," + bestBlankBtn.centerY());
                             int clickY = getVisibleClickYAvoidingBottomOverlay(bestBlankBtn, bottomOverlayTop);
-                            smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
-                            click(bestBlankBtn.centerX(), clickY, false);
-                            if (!checkNextOK(smartList, step))
+                            if(!isNextCard)
                             {
-                                swipeToTop(slVuot, false);
+                                smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                            }
+                            click(bestBlankBtn.centerX(), clickY, false);
+                            if(!isNextCard)
+                            {
+                                if (!checkNextOK(smartList, step))
+                                {
+                                    swipeToTop(slVuot, false);
+                                }
                             }
                             break checkButtonAgainLoop; // Quay xe thoát hiểm thành công
                         }
@@ -6142,11 +6467,18 @@ public class StartAuto extends HSQService
                     }
 
                     updateNotificationContent("Đồng hóa Next: OCR chốt nút [" + btnSmart.text + "] tại Y=" + btnSmart.y);
-                    smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
-                    click(finalX, btnSmart.y, false);
-                    if (!checkNextOK(smartList, step))
+                    if(!isNextCard)
                     {
-                        swipeToTop(slVuot, false);
+                        smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                    }
+                    click(finalX, btnSmart.y, false);
+
+                    if(!isNextCard)
+                    {
+                        if (!checkNextOK(smartList, step))
+                        {
+                            swipeToTop(slVuot, false);
+                        }
                     }
                     break checkButtonAgainLoop;
                 }
@@ -6272,17 +6604,29 @@ public class StartAuto extends HSQService
                     {
                         updateNotificationContent("Đồng hóa Next: XML Bắt sống tại " + bestXmlBtnRect.centerX() + "," + bestXmlBtnRect.centerY());
                         int clickY = getVisibleClickYAvoidingBottomOverlay(bestXmlBtnRect, bottomOverlayTop);
-                        smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
-                        click(bestXmlBtnRect.centerX(), clickY, false);
-                        if (!checkNextOK(smartList, step))
+                        if(!isNextCard)
                         {
-                            swipeToTop(slVuot, false);
+                            smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                        }
+                        click(bestXmlBtnRect.centerX(), clickY, false);
+
+                        if(!isNextCard)
+                        {
+                            if (!checkNextOK(smartList, step))
+                            {
+                                swipeToTop(slVuot, false);
+                            }
                         }
                         break checkButtonAgainLoop;
                     }
                 }
                 catch (Exception ignored)
                 {
+                }
+
+                if (isNextIntent && tryClickGreenFooterNextButton(step, smartList, slVuot))
+                {
+                    break checkButtonAgainLoop;
                 }
 
                 // TẦNG 4: XỬ LÝ VUỐT (NHƯ CŨ)
@@ -6377,16 +6721,26 @@ public class StartAuto extends HSQService
                                 if (rawPoint != null) {
                                     updateNotificationContent("SoM ClickBtn: AI dùng tọa độ gốc X=" + rawPoint.x + ", Y=" + rawPoint.y);
                                     click(rawPoint.x, rawPoint.y, false);
-                                    if (!checkNextOK(currentVisible, step)) {
-                                        swipeToTop(slVuot, false);
+
+                                    if(!isNextCard)
+                                    {
+                                        if (!checkNextOK(currentVisible, step))
+                                        {
+                                            swipeToTop(slVuot, false);
+                                        }
                                     }
                                     break checkButtonAgainLoop;
                                 } else if (aiChoice > 0 && somMap.containsKey(aiChoice)) {
                                     android.graphics.Point target = somMap.get(aiChoice);
                                     updateNotificationContent("SoM ClickBtn: AI chốt #" + aiChoice + " tại X=" + target.x + ", Y=" + target.y);
                                     click(target.x, target.y, false);
-                                    if (!checkNextOK(currentVisible, step)) {
-                                        swipeToTop(slVuot, false);
+
+                                    if(!isNextCard)
+                                    {
+                                        if (!checkNextOK(currentVisible, step))
+                                        {
+                                            swipeToTop(slVuot, false);
+                                        }
                                     }
                                     break checkButtonAgainLoop;
                                 }
@@ -6485,6 +6839,132 @@ public class StartAuto extends HSQService
 
         int maxDist = Math.min(3, Math.max(1, (int) Math.floor(targetNorm.length() * 0.18)));
         return HSQTools.levenshtein(cleanText, targetNorm) <= maxDist;
+    }
+
+    private boolean tryClickGreenFooterNextButton(String step, List<HSQTools.TextBlock> smartList, int slVuot)
+    {
+        android.graphics.Point p = findGreenFooterNextButtonPoint();
+        if (p == null) return false;
+
+        updateNotificationContent("Visual Next xanh: bam tai " + p.x + "," + p.y);
+        List<HSQTools.TextBlock> beforeClick = smartList == null
+                ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
+                : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
+        click(p.x, p.y, false);
+
+        if (!isNextCard && !checkNextOK(beforeClick, step))
+        {
+            swipeToTop(slVuot, false);
+            return false;
+        }
+        return true;
+    }
+
+    private android.graphics.Point findGreenFooterNextButtonPoint()
+    {
+        android.graphics.Bitmap bmp = null;
+        try
+        {
+            bmp = HSQTools.getScreenBitmap();
+            if (bmp == null) return null;
+
+            int screenW = bmp.getWidth();
+            int screenH = bmp.getHeight();
+            if (screenW <= 0 || screenH <= 0) return null;
+
+            int leftLimit = Math.max(0, (int) (screenW * 0.42f));
+            int topLimit = Math.max(181, (int) (screenH * 0.42f));
+            int rightLimit = screenW - 24;
+            int bottomLimit = Math.min(screenH - 120, (int) (screenH * 0.93f));
+            int step = 4;
+
+            int minX = Integer.MAX_VALUE;
+            int minY = Integer.MAX_VALUE;
+            int maxX = Integer.MIN_VALUE;
+            int maxY = Integer.MIN_VALUE;
+            long sumX = 0L;
+            long sumY = 0L;
+            int count = 0;
+
+            for (int y = topLimit; y < bottomLimit; y += step)
+            {
+                for (int x = leftLimit; x < rightLimit; x += step)
+                {
+                    int color = bmp.getPixel(x, y);
+                    if (!isLikelyGreenNextButtonPixel(color)) continue;
+
+                    sumX += x;
+                    sumY += y;
+                    count++;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+
+            if (count < 220) return null;
+
+            int blobW = maxX - minX + step;
+            int blobH = maxY - minY + step;
+            if (blobW < 150 || blobH < 70) return null;
+            if (blobW > screenW * 0.58f || blobH > screenH * 0.24f) return null;
+
+            float ratio = (float) blobW / Math.max(1, blobH);
+            if (ratio < 1.18f || ratio > 5.2f) return null;
+
+            float coverage = (count * step * step) / (float) Math.max(1, blobW * blobH);
+            if (coverage < 0.32f) return null;
+
+            int centerX = (minX + maxX) / 2;
+            int centerY = (minY + maxY) / 2;
+            if (centerX < screenW * 0.50f || centerY < screenH * 0.50f) return null;
+
+            int whiteInside = 0;
+            int innerLeft = Math.max(minX + 20, centerX - blobW / 3);
+            int innerRight = Math.min(maxX - 20, centerX + blobW / 3);
+            int innerTop = Math.max(minY + 15, centerY - blobH / 3);
+            int innerBottom = Math.min(maxY - 15, centerY + blobH / 3);
+            for (int y = innerTop; y < innerBottom; y += step)
+            {
+                for (int x = innerLeft; x < innerRight; x += step)
+                {
+                    if (isLikelyWhitePixel(bmp.getPixel(x, y))) whiteInside++;
+                }
+            }
+
+            if (whiteInside < 6 && blobW < 220) return null;
+
+            return new android.graphics.Point(centerX, centerY);
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+        finally
+        {
+            try
+            {
+                if (bmp != null && !bmp.isRecycled()) bmp.recycle();
+            }
+            catch (Exception ignored) {}
+        }
+    }
+
+    private boolean isLikelyGreenNextButtonPixel(int color)
+    {
+        int r = android.graphics.Color.red(color);
+        int g = android.graphics.Color.green(color);
+        int b = android.graphics.Color.blue(color);
+        return g >= 145 && g >= r + 45 && g >= b + 25 && r <= 80 && b <= 165;
+    }
+
+    private boolean isLikelyWhitePixel(int color)
+    {
+        int r = android.graphics.Color.red(color);
+        int g = android.graphics.Color.green(color);
+        int b = android.graphics.Color.blue(color);
+        return r >= 210 && g >= 210 && b >= 210 && Math.abs(r - g) <= 35 && Math.abs(g - b) <= 35;
     }
 
     private int tryClickPageNavigationFromXml(String step, List<HSQTools.TextBlock> smartList, int slVuot, boolean canReveal)
@@ -6626,16 +7106,20 @@ public class StartAuto extends HSQService
                     ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
                     : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
             click(clickX, clickY, false);
-            if (!checkNextOK(beforeClick, step))
+
+            if(!isNextCard)
             {
-                swipeToTop(slVuot, false);
-                if (canReveal && !bestClipped)
+                if (!checkNextOK(beforeClick, step))
                 {
-                    updateNotificationContent("XML Nav: bam chua an, vuot de lo nut roi thu lai");
-                    smartScroll(ysBot, ysTop, "xmlnav_retry_reveal");
-                    return 2;
+                    swipeToTop(slVuot, false);
+                    if (canReveal && !bestClipped)
+                    {
+                        updateNotificationContent("XML Nav: bam chua an, vuot de lo nut roi thu lai");
+                        smartScroll(ysBot, ysTop, "xmlnav_retry_reveal");
+                        return 2;
+                    }
+                    return 0;
                 }
-                return 0;
             }
             return 1;
         }
@@ -6929,9 +7413,13 @@ public class StartAuto extends HSQService
                     ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
                     : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
             click(clickX, clickY, false);
-            if (!checkNextOK(beforeClick, step))
+
+            if(!isNextCard)
             {
-                swipeToTop(slVuot, false);
+                if (!checkNextOK(beforeClick, step))
+                {
+                    swipeToTop(slVuot, false);
+                }
             }
             return true;
         }
