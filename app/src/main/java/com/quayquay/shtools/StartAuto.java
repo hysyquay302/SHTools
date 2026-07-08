@@ -5178,7 +5178,9 @@ public class StartAuto extends HSQService
                     boolean isSquareShape = (float) Math.max(r.width(), r.height()) / Math.min(r.width(), r.height()) < 2.0f;
                     boolean hasNoText = node.getAttribute("text").trim().isEmpty() && node.getAttribute("content-desc").trim().isEmpty();
 
-                    if (isExplicitRadio || (isSmallBox && isSquareShape && hasNoText)) {
+                    boolean isUsableExplicitRadio = isExplicitRadio && r.width() >= 16 && r.height() >= 16;
+
+                    if (isUsableExplicitRadio || (isSmallBox && isSquareShape && hasNoText)) {
                         validRadios.add(node);
                     }
                 }
@@ -5590,7 +5592,44 @@ public class StartAuto extends HSQService
         String nodeCompact = nodeNorm.replace("-", "");
         String targetCompact = targetNorm.replace("-", "");
         if (isNumericClickToTextEquivalent(nodeCompact, targetCompact)) return true;
-        return nodeCompact.equals(targetCompact) || HSQTools.equalsOcrFriendly(nodeCompact, targetCompact);
+        return nodeCompact.equals(targetCompact)
+                || HSQTools.equalsOcrFriendly(nodeCompact, targetCompact)
+                || isClickToTextPrefixDetailMatch(nodeCompact, targetCompact);
+    }
+
+    private boolean isClickToTextPrefixDetailMatch(String nodeCompact, String targetCompact)
+    {
+        if (nodeCompact == null || targetCompact == null) return false;
+        if (nodeCompact.length() <= targetCompact.length()) return false;
+        if (targetCompact.length() < 6) return false;
+        if (isDangerousClickToTextPrefixTarget(targetCompact)) return false;
+
+        boolean startsMatch = nodeCompact.startsWith(targetCompact);
+        if (!startsMatch && nodeCompact.length() >= targetCompact.length())
+        {
+            startsMatch = HSQTools.equalsOcrFriendly(nodeCompact.substring(0, targetCompact.length()), targetCompact);
+        }
+        if (!startsMatch) return false;
+
+        int extraLen = nodeCompact.length() - targetCompact.length();
+        return extraLen <= Math.max(18, targetCompact.length() * 3);
+    }
+
+    private boolean isDangerousClickToTextPrefixTarget(String targetCompact)
+    {
+        if (targetCompact == null) return true;
+        return targetCompact.equals("co")
+                || targetCompact.equals("khong")
+                || targetCompact.equals("nam")
+                || targetCompact.equals("nu")
+                || targetCompact.equals("male")
+                || targetCompact.equals("female")
+                || targetCompact.equals("yes")
+                || targetCompact.equals("no")
+                || targetCompact.equals("tren")
+                || targetCompact.equals("duoi")
+                || targetCompact.equals("khac")
+                || targetCompact.equals("other");
     }
 
     private boolean isNumericClickToTextEquivalent(String nodeText, String targetText)
@@ -8684,7 +8723,7 @@ public class StartAuto extends HSQService
                     if (node.getAttribute("class").contains("EditText") || node.getAttribute("class").contains("AutoCompleteTextView"))
                     {
                         String combined = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(node.getAttribute("text") + " " + node.getAttribute("content-desc")));
-                        if (!combined.isEmpty() && (combined.equals(normTarget) || combined.contains(normTarget)))
+                        if (isInputLabelMatch(combined, normTarget))
                         {
                             android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
 
@@ -8723,7 +8762,7 @@ public class StartAuto extends HSQService
                             {
                                 if (r.centerY() > 100 && r.centerY() < heightOfScreen - 50)
                                 {
-                                    if (combined.equals(normTarget) || combined.contains(normTarget))
+                                    if (isInputLabelMatch(combined, normTarget))
                                     {
                                         if (r.height() < minLabelHeight)
                                         {
@@ -9133,6 +9172,10 @@ public class StartAuto extends HSQService
         int best = Integer.MAX_VALUE;
         for (String clean : getInputCleanVariants(rawText)) {
             if (clean.length() < 3) continue;
+            int aliasScore = getInputLabelMatchScore(clean, normAnchor);
+            if (aliasScore != Integer.MAX_VALUE) {
+                best = Math.min(best, aliasScore);
+            }
             if (clean.equals(normAnchor)) best = Math.min(best, 0);
             if (HSQTools.containsOcrFriendly(clean, normAnchor) || HSQTools.containsOcrFriendly(normAnchor, clean)) {
                 best = Math.min(best, 5 + Math.abs(clean.length() - normAnchor.length()));
@@ -9146,6 +9189,58 @@ public class StartAuto extends HSQService
             }
         }
         return best;
+    }
+
+    private boolean isInputLabelMatch(String cleanText, String normTarget) {
+        return getInputLabelMatchScore(cleanText, normTarget) != Integer.MAX_VALUE;
+    }
+
+    private int getInputLabelMatchScore(String cleanText, String normTarget) {
+        if (cleanText == null || normTarget == null) return Integer.MAX_VALUE;
+        if (cleanText.isEmpty() || normTarget.length() < 2) return Integer.MAX_VALUE;
+
+        if (cleanText.equals(normTarget)) return 0;
+        if (cleanText.contains(normTarget)) return 5 + Math.abs(cleanText.length() - normTarget.length());
+        if (cleanText.length() >= 4 && normTarget.contains(cleanText)) return 8 + Math.abs(cleanText.length() - normTarget.length());
+        if (normTarget.length() >= 4 && HSQTools.containsOcrFriendly(cleanText, normTarget)) return 10 + Math.abs(cleanText.length() - normTarget.length());
+
+        int targetOrdinal = extractInputOrdinal(normTarget);
+        int nodeOrdinal = extractInputOrdinal(cleanText);
+        if (targetOrdinal > 0 && nodeOrdinal > 0 && targetOrdinal == nodeOrdinal) {
+            String targetBase = stripInputOrdinal(normTarget);
+            String nodeBase = stripInputOrdinal(cleanText);
+            if (targetBase.length() >= 4 && nodeBase.length() >= 4) {
+                if (nodeBase.contains(targetBase) || HSQTools.containsOcrFriendly(nodeBase, targetBase)) {
+                    return 18 + Math.abs(nodeBase.length() - targetBase.length());
+                }
+                if (targetBase.contains(nodeBase) || HSQTools.containsOcrFriendly(targetBase, nodeBase)) {
+                    return 25 + Math.abs(nodeBase.length() - targetBase.length());
+                }
+            }
+        }
+
+        return Integer.MAX_VALUE;
+    }
+
+    private int extractInputOrdinal(String cleanText) {
+        if (cleanText == null || cleanText.isEmpty()) return -1;
+        if (cleanText.contains("dautien") || cleanText.contains("thunhat") || cleanText.contains("thumot") || cleanText.contains("first")) return 1;
+
+        Matcher matcher = Pattern.compile("(?:thu|so|number)(\\d{1,2})").matcher(cleanText);
+        if (matcher.find()) {
+            try {
+                return Integer.parseInt(matcher.group(1));
+            } catch (Exception ignored) {
+            }
+        }
+        return -1;
+    }
+
+    private String stripInputOrdinal(String cleanText) {
+        if (cleanText == null) return "";
+        return cleanText
+                .replaceAll("(dautien|thunhat|thumot|first)", "")
+                .replaceAll("(?:thu|so|number)\\d{1,2}", "");
     }
 
     private String cleanInputGeometryText(String rawText) {
@@ -9208,7 +9303,7 @@ public class StartAuto extends HSQService
                         String combined = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(node.getAttribute("text") + " " + node.getAttribute("content-desc")));
                         android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
                         if (r != null && !combined.isEmpty() && r.height() < (heightOfScreen * 0.8) && normTarget.length() >= 2) {
-                            if (combined.equals(normTarget) || combined.contains(normTarget)) {
+                            if (isInputLabelMatch(combined, normTarget)) {
                                 if (r.height() < minLabelHeight) {
                                     minLabelHeight = r.height();
                                     labelBottom = r.bottom;
@@ -9253,7 +9348,7 @@ public class StartAuto extends HSQService
                     for (HSQTools.TextBlock tb : currentScreen) {
                         if (tb.y > 180) {
                             String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(tb.text));
-                            if (!clean.isEmpty() && normTarget.length() >= 2 && (clean.equals(normTarget) || clean.contains(normTarget))) {
+                            if (isInputLabelMatch(clean, normTarget)) {
                                 if (tb.y < minLabelY) {
                                     minLabelY = tb.y;
                                     labelBlock = tb;
@@ -11176,11 +11271,7 @@ public class StartAuto extends HSQService
                 if (r.height() <= 10 || r.height() >= (heightOfScreen * 0.8)) continue;
                 if (r.centerY() <= 180 || r.centerY() >= heightOfScreen - 50) continue;
 
-                boolean labelMatch =
-                        combined.equals(normTarget) ||
-                                combined.contains(normTarget) ||
-                                (combined.length() >= 4 && normTarget.contains(combined)) ||
-                                (normTarget.length() >= 4 && HSQTools.containsOcrFriendly(combined, normTarget));
+                boolean labelMatch = isInputLabelMatch(combined, normTarget);
 
                 if (labelMatch && r.height() < minLabelHeight)
                 {
