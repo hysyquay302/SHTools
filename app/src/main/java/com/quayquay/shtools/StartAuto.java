@@ -797,7 +797,7 @@ public class StartAuto extends HSQService
                             else if (checkSetup == 4 && LastInterFace != 4)
                             {
                                 updateNotificationContent("Thu nhập trung bình HGĐ hàng năm");
-                                click(720, 1400, false);
+                                click(720, 1000, false);
                                 delay(2000);
                                 clearAllText();
                                 delay(1000);
@@ -6320,6 +6320,7 @@ public class StartAuto extends HSQService
         String rawTarget = matchBtn.find() ? matchBtn.group(1).trim() : "";
 
         boolean isArrow = rawTarget.contains(">") || rawTarget.contains("->") || rawTarget.contains("â†’");
+        isArrow = containsNextArrowGlyph(rawTarget) || isArrow;
         final String cleanTargetNorm = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawTarget));
         final String targetNorm = isArrow ? rawTarget : cleanTargetNorm;
         final boolean isCardNextTarget = cleanTargetNorm.matches("^(nextthe|nextcard|cardnext|chuyenthe|chuyenthetheo|thetieptheo|tiepthenay|thesau|muitenthe|arrowcard|nextattribute|attribute_next)$");
@@ -6464,6 +6465,11 @@ public class StartAuto extends HSQService
                 // 🌟 TẦNG 2.2: LƯỚI QUÉT TIÊU CHUẨN (MẮT THẦN OCR)
                 if (shouldPreferPageNavigationXml)
                 {
+                    if (tryClickITileNextButtonFromXml(step, smartList, slVuot))
+                    {
+                        break checkButtonAgainLoop;
+                    }
+
                     int navAction = tryClickPageNavigationFromXml(step, smartList, slVuot, navRevealSwipeCount < 8);
                     if (navAction == 1)
                     {
@@ -6557,12 +6563,12 @@ public class StartAuto extends HSQService
                             boolean isQuotedText = rawFullText.contains("'") || rawFullText.contains("\"") || rawFullText.contains("‘") || rawFullText.contains("’");
 
                             if (!isInvalidTopText && !isQuotedText && !(!isAgreeOnlyTarget && isConsentChoiceOnly(cleanFullText))) {
-                                if (rawFullText.contains(">") || rawFullText.contains(">>") || rawFullText.contains("->") || rawFullText.toLowerCase().contains("arrow_right") || rawFullText.toLowerCase().contains("arrowright"))
+                                if (containsNextArrowGlyph(rawFullText))
                                     isMatch = true;
                                 if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|tiepthe|trangtieptheo|tieptheo>|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|>|>>|>>>|gotonextquestion|fwd|forward|tiep|arrowright)$"))
                                     isMatch = true;
                                 // Tóm sống cái nút chuyển thẻ của bọn GfK/NIQ
-                                if (resId.toLowerCase().contains("next") || resId.toLowerCase().contains("continue") || resId.toLowerCase().contains("btn_forward") || resId.toLowerCase().contains("navright"))
+                                if (resId.toLowerCase().contains("next") || resId.toLowerCase().contains("continue") || resId.toLowerCase().contains("btn_forward") || resId.toLowerCase().contains("navright") || resId.toLowerCase().contains("nbtn"))
                                     isMatch = true;
                             }
                         }
@@ -7048,7 +7054,7 @@ public class StartAuto extends HSQService
                 String resLower = resId == null ? "" : resId.toLowerCase(Locale.US);
                 if (resLower.contains("statusbarbackground") || resLower.contains("navigationbarbackground")) continue;
                 String clazzLower = clazz == null ? "" : clazz.toLowerCase(Locale.US);
-                boolean navId = resLower.contains("nav") || resLower.contains("next") || resLower.contains("continue") || resLower.contains("submit");
+                boolean navId = resLower.contains("nav") || resLower.contains("next") || resLower.contains("continue") || resLower.contains("submit") || resLower.contains("nbtn");
                 boolean nextText = isNextNavigationText(rawFullText, cleanFullText);
                 int visibleBottomBeforeOverlay = bottomOverlayTop > 0 ? Math.min(r.bottom, bottomOverlayTop - 8) : r.bottom;
                 int visibleHeightBeforeOverlay = Math.max(0, visibleBottomBeforeOverlay - Math.max(r.top, 181));
@@ -7168,6 +7174,111 @@ public class StartAuto extends HSQService
         }
     }
 
+    private boolean tryClickITileNextButtonFromXml(String step, List<HSQTools.TextBlock> smartList, int slVuot)
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return false;
+
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            android.graphics.Rect bestRect = null;
+            String bestLabel = "";
+            int bestScore = Integer.MIN_VALUE;
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                if ("false".equals(node.getAttribute("enabled"))) continue;
+
+                String resId = node.getAttribute("resource-id");
+                String clazz = node.getAttribute("class");
+                String rawText = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                String resLower = resId == null ? "" : resId.toLowerCase(Locale.US);
+                String clazzLower = clazz == null ? "" : clazz.toLowerCase(Locale.US);
+
+                boolean isITileNext = resLower.contains("itile_nbtn") || (resLower.contains("nbtn") && containsNextArrowGlyph(rawText));
+                if (!isITileNext) continue;
+                if (!clazzLower.contains("button") && !"true".equals(node.getAttribute("clickable"))) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() < 80 || r.height() < 50) continue;
+                if (r.centerY() <= 180 || r.centerY() >= heightOfScreen - 80) continue;
+                if (isLikelyFloatingScrollTopControl(r, rawText + " " + resId + " " + clazz, smartList)) continue;
+
+                int score = r.centerY();
+                if (clazzLower.contains("button")) score += 5000;
+                if ("true".equals(node.getAttribute("clickable"))) score += 3000;
+                if (containsNextArrowGlyph(rawText)) score += 2000;
+                score -= Math.abs(r.centerX() - (int) (widthOfScreen * 0.19f)) / 4;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestRect = r;
+                    bestLabel = resId == null || resId.isEmpty() ? rawText : resId;
+                }
+            }
+
+            if (bestRect == null) return false;
+
+            String beforeSignature = getSmartScrollXmlSignature();
+            List<HSQTools.TextBlock> beforeClick = smartList == null
+                    ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
+                    : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
+
+            int[][] points = new int[][]{
+                    {bestRect.centerX(), bestRect.centerY()},
+                    {bestRect.left + Math.max(24, bestRect.width() / 3), bestRect.centerY()},
+                    {bestRect.left + Math.max(24, bestRect.width() / 2), bestRect.top + Math.max(24, bestRect.height() / 2)}
+            };
+
+            for (int i = 0; i < points.length; i++)
+            {
+                int clickX = Math.max(24, Math.min(widthOfScreen - 24, points[i][0]));
+                int clickY = Math.max(181, Math.min(heightOfScreen - 120, points[i][1]));
+                updateNotificationContent("iTile Next: bam [" + bestLabel + "] lan " + (i + 1) + " tai " + clickX + "," + clickY);
+                click(clickX, clickY, false);
+
+                if (didNavigationChangeQuick(beforeSignature, beforeClick))
+                {
+                    tryNextAgain = 0;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+    }
+
+    private boolean didNavigationChangeQuick(String beforeSignature, List<HSQTools.TextBlock> beforeClick)
+    {
+        delay(2200);
+        String afterSignature = getSmartScrollXmlSignature();
+        if (beforeSignature != null && !beforeSignature.isEmpty() && afterSignature != null && !afterSignature.isEmpty() && !beforeSignature.equals(afterSignature))
+        {
+            return true;
+        }
+
+        try
+        {
+            List<HSQTools.TextBlock> afterClick = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+            return beforeClick != null && !beforeClick.isEmpty() && !HSQTools.areAlmostSame(afterClick, beforeClick, 20);
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+    }
+
     private boolean isXmlNavRectTooClippedToClick(android.graphics.Rect r, int bottomOverlayTop, android.graphics.Rect ancestorVisibleRect)
     {
         if (r == null) return true;
@@ -7226,10 +7337,27 @@ public class StartAuto extends HSQService
     private boolean isNextNavigationText(String rawFullText, String cleanFullText)
     {
         String rawLower = rawFullText == null ? "" : rawFullText.toLowerCase(Locale.US).replaceAll("\\s+", "");
-        if (rawLower.contains(">") || rawLower.contains("->") || rawLower.contains("arrow_right") || rawLower.contains("arrowright")) return true;
+        if (containsNextArrowGlyph(rawLower)) return true;
         if (cleanFullText == null) cleanFullText = "";
         if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|tiepthe|xinhaytieptuc|haytieptuc|vuilongtieptuc|trangtieptheo|tieptheotrang|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|gotonextquestion|fwd|forward|tiep|arrowright)$")) return true;
         return cleanFullText.length() <= 80 && (cleanFullText.contains("tieptuc") || cleanFullText.contains("tieptheo") || cleanFullText.contains("tiepthe") || cleanFullText.contains("next") || cleanFullText.contains("continue") || cleanFullText.contains("submit") || cleanFullText.contains("batdau"));
+    }
+
+    private boolean containsNextArrowGlyph(String rawText)
+    {
+        if (rawText == null) return false;
+        String compact = rawText.toLowerCase(Locale.US).replaceAll("\\s+", "");
+        return compact.contains(">")
+                || compact.contains("->")
+                || compact.contains("\uFF1E")
+                || compact.contains("\u203A")
+                || compact.contains("\u00BB")
+                || compact.contains("\u2192")
+                || compact.contains("\u27A1")
+                || compact.contains("\u21D2")
+                || compact.contains("\u226B")
+                || compact.contains("arrow_right")
+                || compact.contains("arrowright");
     }
 
     private boolean isLikelyFloatingScrollTopControl(android.graphics.Rect r, String rawMeta, List<HSQTools.TextBlock> smartList)
