@@ -2376,6 +2376,12 @@ public class StartAuto extends HSQService
                                                                 continue stateMachine;
                                                             }
 
+                                                            delay(800);
+                                                            if (tryClickCompletedAccordionNextFromXml(step, null, "accordion_done"))
+                                                            {
+                                                                delay(2000);
+                                                            }
+
                                                         }
                                                         else if (step.contains("click_block"))
                                                         {
@@ -2403,6 +2409,12 @@ public class StartAuto extends HSQService
                                                                         phoneScreen.add(new TextBlock("Đã vuốt xuống", 0, 0));
                                                                         List<TextBlock> currentVisible = smartList.stream()
                                                                                 .filter(x -> x.y > 180 && x.y < 2900).collect(Collectors.toList());
+
+                                                                        if (tryClickCompletedAccordionNextFromXml(step, currentVisible, "click_block_guard"))
+                                                                        {
+                                                                            delay(2000);
+                                                                            break;
+                                                                        }
 
                                                                         // =======================================================
                                                                         // 1. TÌM TIÊU ĐỀ CÂU HỎI (HEADER) - LAI GHÉP OCR & XML
@@ -5931,6 +5943,197 @@ public class StartAuto extends HSQService
             return true;
         return false;
     }
+
+    private boolean tryClickCompletedAccordionNextFromXml(String originalStep, List<HSQTools.TextBlock> smartList, String reason)
+    {
+        try
+        {
+            if (!isCompletedAccordionNextReadyFromXml()) return false;
+
+            List<HSQTools.TextBlock> beforeClick = smartList == null
+                    ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
+                    : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
+
+            updateNotificationContent("Accordion da xong, thay nut next -> bam tiep (" + reason + ")");
+            int navAction = tryClickPageNavigationFromXml("step1 clickbutton {next_page}", beforeClick, 0, false);
+            return navAction == 1;
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+    }
+
+    private boolean isCompletedAccordionNextReadyFromXml()
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return false;
+
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            boolean hasAccordionContainer = false;
+            List<android.graphics.Rect> headerRects = new ArrayList<>();
+            android.graphics.Rect visibleNextRect = null;
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Node domNode = nodes.item(i);
+                if (!(domNode instanceof org.w3c.dom.Element)) continue;
+                org.w3c.dom.Element node = (org.w3c.dom.Element) domNode;
+
+                String resId = node.getAttribute("resource-id");
+                String clazz = node.getAttribute("class");
+                String text = node.getAttribute("text");
+                String desc = node.getAttribute("content-desc");
+                String clickable = node.getAttribute("clickable");
+                String focusable = node.getAttribute("focusable");
+                String enabled = node.getAttribute("enabled");
+
+                String resLower = resId == null ? "" : resId.toLowerCase(Locale.US);
+                String clazzLower = clazz == null ? "" : clazz.toLowerCase(Locale.US);
+                String rawFullText = ((text == null ? "" : text) + " " + (desc == null ? "" : desc)).trim();
+                String cleanFullText = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawFullText));
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+
+                if ("accordion".equals(resLower) || resLower.endsWith(":id/accordion"))
+                {
+                    hasAccordionContainer = true;
+                }
+
+                if (resLower.contains("accordion-header"))
+                {
+                    if (r != null
+                            && r.width() > widthOfScreen * 0.45f
+                            && r.height() > 45
+                            && r.centerY() > 180
+                            && r.centerY() < heightOfScreen - 80
+                            && "true".equals(clickable)
+                            && !"false".equals(enabled)
+                            && rawFullText.length() > 8)
+                    {
+                        headerRects.add(r);
+                    }
+                    continue;
+                }
+
+                if (r == null || "false".equals(enabled)) continue;
+
+                boolean navId = resLower.contains("btn_continue")
+                        || resLower.contains("continue")
+                        || resLower.contains("next")
+                        || resLower.contains("submit")
+                        || resLower.contains("nav");
+                boolean nextText = isNextNavigationText(rawFullText, cleanFullText);
+                boolean buttonish = clazzLower.contains("button")
+                        || "true".equals(clickable)
+                        || "true".equals(focusable)
+                        || navId;
+                boolean visibleButton = r.width() >= 70
+                        && r.height() >= 45
+                        && r.centerY() > heightOfScreen * 0.55f
+                        && r.centerY() < heightOfScreen - 80;
+
+                if (buttonish && visibleButton && (navId || nextText))
+                {
+                    if (visibleNextRect == null || r.centerY() > visibleNextRect.centerY())
+                    {
+                        visibleNextRect = r;
+                    }
+                }
+            }
+
+            if (!hasAccordionContainer && headerRects.size() < 3) return false;
+            if (headerRects.size() < 3 || visibleNextRect == null) return false;
+
+            int greenHeaders = countLikelyGreenAccordionHeaders(headerRects);
+            if (greenHeaders >= Math.min(3, headerRects.size())) return true;
+
+            return false;
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+    }
+
+    private int countLikelyGreenAccordionHeaders(List<android.graphics.Rect> headerRects)
+    {
+        if (headerRects == null || headerRects.isEmpty()) return 0;
+
+        android.graphics.Bitmap bmp = null;
+        try
+        {
+            bmp = HSQTools.getScreenBitmap();
+            if (bmp == null) return 0;
+
+            int count = 0;
+            for (android.graphics.Rect r : headerRects)
+            {
+                if (isLikelyGreenAccordionHeaderRect(bmp, r))
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+        catch (Exception ignored)
+        {
+            return 0;
+        }
+        finally
+        {
+            try
+            {
+                if (bmp != null && !bmp.isRecycled()) bmp.recycle();
+            }
+            catch (Exception ignored) {}
+        }
+    }
+
+    private boolean isLikelyGreenAccordionHeaderRect(android.graphics.Bitmap bmp, android.graphics.Rect rawRect)
+    {
+        if (bmp == null || rawRect == null) return false;
+
+        int left = Math.max(0, Math.min(bmp.getWidth() - 1, rawRect.left + Math.max(8, rawRect.width() / 30)));
+        int right = Math.max(0, Math.min(bmp.getWidth() - 1, rawRect.right - Math.max(8, rawRect.width() / 30)));
+        int top = Math.max(0, Math.min(bmp.getHeight() - 1, rawRect.top + Math.max(6, rawRect.height() / 8)));
+        int bottom = Math.max(0, Math.min(bmp.getHeight() - 1, rawRect.bottom - Math.max(6, rawRect.height() / 8)));
+        if (right <= left || bottom <= top) return false;
+
+        int stepX = Math.max(12, (right - left) / 10);
+        int stepY = Math.max(10, (bottom - top) / 5);
+        int samples = 0;
+        int green = 0;
+
+        for (int y = top; y <= bottom; y += stepY)
+        {
+            for (int x = left; x <= right; x += stepX)
+            {
+                int color = bmp.getPixel(x, y);
+                samples++;
+                if (isLikelyAccordionGreenPixel(color))
+                {
+                    green++;
+                }
+            }
+        }
+
+        return samples > 0 && green >= Math.max(4, samples / 4);
+    }
+
+    private boolean isLikelyAccordionGreenPixel(int color)
+    {
+        int r = android.graphics.Color.red(color);
+        int g = android.graphics.Color.green(color);
+        int b = android.graphics.Color.blue(color);
+        return g >= 145 && g > r + 35 && g > b + 8 && b >= 80 && r <= 175;
+    }
+
     private android.graphics.Point findChoiceCheckmarkPointForText(String textWantToClick, HSQTools.TextBlock target, List<HSQTools.TextBlock> visibleBlocks)
     {
         if (target == null || !isCheckmarkChoiceScreen(visibleBlocks)) return null;

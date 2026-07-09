@@ -504,13 +504,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private void showMediaProjectionDialog() {
         hasShownPermissionDialog = true;
-        // Fix: Expression lambda
-        new AlertDialog.Builder(this)
-                .setTitle("Yêu cầu quyền")
-                .setMessage("Vui lòng cấp quyền Quay/Chụp màn hình. Thư viện HSQLibrary cần quyền này để thu thập dữ liệu màn hình.")
-                .setPositiveButton("OK", (dialog, which) -> checkMediaProjection())
-                .setNegativeButton("Cancel", null)
-                .show();
+        getWindow().getDecorView().postDelayed(this::checkMediaProjection, 300);
     }
 
     private void showNotificationPermissionDialog() {
