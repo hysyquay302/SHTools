@@ -2519,6 +2519,17 @@ public class StartAuto extends HSQService
                                                                             }
                                                                         }
 
+                                                                        if (!daThayHeader)
+                                                                        {
+                                                                            TextBlock looseHeader = findClickBlockLooseHeaderBlock(currentVisible, headerStr);
+                                                                            if (looseHeader != null)
+                                                                            {
+                                                                                targetY = looseHeader.y;
+                                                                                daThayHeader = true;
+                                                                                updateNotificationContent("Block: ghep duoc header roi bang token tai Y=" + targetY);
+                                                                            }
+                                                                        }
+
                                                                         // =======================================================
                                                                         // 2. KÉO HEADER LÊN ĐỈNH ĐỂ LỘ ĐÁP ÁN (CHỐNG KẸT ĐÁY)
                                                                         // =======================================================
@@ -2551,6 +2562,15 @@ public class StartAuto extends HSQService
                                                                                 finalClickPt = matrixChoicePt;
                                                                             }
                                                                             else if (isNumeric)
+                                                                            {
+                                                                                android.graphics.Point blankScalePt = findClickBlockBlankScalePointFromXml(headerStr, answerStr, targetY, currentVisible);
+                                                                                if (blankScalePt != null)
+                                                                                {
+                                                                                    finalClickPt = blankScalePt;
+                                                                                }
+                                                                            }
+
+                                                                            if (finalClickPt == null && isNumeric)
                                                                             {
                                                                                 // CHIẾN THUẬT 1: TÌM THEO TEXT SỐ (Ví dụ click_block {Cau 1~5})
                                                                                 TextBlock ansNode = findClickBlockAnswerNode(currentVisible, cleanAnswerForMode, targetY, false);
@@ -2673,7 +2693,7 @@ public class StartAuto extends HSQService
                                                                                     }
                                                                                 }
                                                                             }
-                                                                            else
+                                                                            else if (finalClickPt == null)
                                                                             {
                                                                                 // CHIẾN THUẬT CHỮ (ĐÃ BỌC THÉP CHỐNG CẮN NGƯỢC)
 
@@ -10090,6 +10110,227 @@ public class StartAuto extends HSQService
 
         return x.y > 180 && x.y < heightOfScreen - 80;
     }
+
+    private HSQTools.TextBlock findClickBlockLooseHeaderBlock(List<HSQTools.TextBlock> currentVisible, String headerStr)
+    {
+        if (currentVisible == null || headerStr == null || headerStr.trim().isEmpty()) return null;
+
+        HSQTools.TextBlock best = null;
+        int bestScore = Integer.MIN_VALUE;
+
+        for (HSQTools.TextBlock block : currentVisible)
+        {
+            if (block == null || block.text == null || block.text.trim().isEmpty()) continue;
+            if (block.y <= 180 || block.y >= heightOfScreen - 80) continue;
+
+            int labelScore = clickBlockMatrixLabelScore(block.text, headerStr);
+            if (labelScore <= 0) continue;
+
+            int score = labelScore * 1000;
+            score -= Math.abs(block.x - xCenter) / 8;
+            score -= block.y / 20;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = block;
+            }
+        }
+
+        return bestScore >= 4000 ? best : null;
+    }
+
+    private android.graphics.Point findClickBlockBlankScalePointFromXml(String headerStr, String answerStr, int targetY, List<HSQTools.TextBlock> currentVisible)
+    {
+        try
+        {
+            String cleanAnswer = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(answerStr));
+            if (!cleanAnswer.matches("\\d+")) return null;
+
+            int answerValue = Integer.parseInt(cleanAnswer);
+            if (answerValue < 0 || answerValue > 20) return null;
+
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return null;
+
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            List<android.graphics.Rect> scaleRects = collectClickBlockBlankScaleRects(nodes, targetY);
+            List<List<android.graphics.Rect>> rowGroups = groupClickBlockChoiceRows(scaleRects);
+            if (rowGroups.isEmpty()) return null;
+
+            int labelY = findClickBlockBlankScaleLabelY(nodes, currentVisible);
+            List<android.graphics.Rect> row = chooseClickBlockBlankScaleRow(rowGroups, targetY, labelY, answerValue);
+            if (row == null || row.isEmpty()) return null;
+            row.sort(Comparator.comparingInt(android.graphics.Rect::centerX));
+
+            int answerIndex = clickBlockScaleAnswerIndex(row.size(), answerValue);
+            if (answerIndex < 0 || answerIndex >= row.size()) return null;
+
+            android.graphics.Rect target = row.get(answerIndex);
+            updateNotificationContent("Block scale XML: chot [" + headerStr + "~" + answerStr + "] o " + (answerIndex + 1) + "/" + row.size() + " tai " + target.centerX() + "," + target.centerY());
+            return new android.graphics.Point(target.centerX(), target.centerY());
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
+    private List<android.graphics.Rect> collectClickBlockBlankScaleRects(org.w3c.dom.NodeList nodes, int targetY)
+    {
+        List<android.graphics.Rect> result = new ArrayList<>();
+        if (nodes == null) return result;
+
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Node domNode = nodes.item(i);
+            if (!(domNode instanceof org.w3c.dom.Element)) continue;
+            org.w3c.dom.Element node = (org.w3c.dom.Element) domNode;
+
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+            if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+            if (r.centerY() <= 180 || r.centerY() >= heightOfScreen - 80) continue;
+            if (targetY > 0 && (r.centerY() < targetY + 40 || r.centerY() > targetY + 1550)) continue;
+            if (r.width() < 60 || r.height() < 45) continue;
+            if (r.width() > widthOfScreen * 0.38f || r.height() > 360) continue;
+
+            String clazz = node.getAttribute("class");
+            if (clazz != null && clazz.contains("Image")) continue;
+
+            String text = node.getAttribute("text");
+            String desc = node.getAttribute("content-desc");
+            boolean textEmpty = (text == null || text.trim().isEmpty()) && (desc == null || desc.trim().isEmpty());
+            if (!textEmpty) continue;
+            if (!"true".equals(node.getAttribute("clickable"))) continue;
+            if ("false".equals(node.getAttribute("enabled"))) continue;
+            if (isNearExistingChoiceRect(result, r)) continue;
+
+            result.add(r);
+        }
+
+        result.sort(Comparator.comparingInt(android.graphics.Rect::centerY).thenComparingInt(android.graphics.Rect::centerX));
+        return result;
+    }
+
+    private int findClickBlockBlankScaleLabelY(org.w3c.dom.NodeList nodes, List<HSQTools.TextBlock> currentVisible)
+    {
+        List<Integer> labels = new ArrayList<>();
+
+        if (nodes != null)
+        {
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Node domNode = nodes.item(i);
+                if (!(domNode instanceof org.w3c.dom.Element)) continue;
+                org.w3c.dom.Element node = (org.w3c.dom.Element) domNode;
+                String raw = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                if (!isBlankScaleLabelText(raw)) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r != null && r.centerY() > 180 && r.centerY() < heightOfScreen - 80)
+                {
+                    labels.add(r.centerY());
+                }
+            }
+        }
+
+        if (labels.isEmpty() && currentVisible != null)
+        {
+            for (HSQTools.TextBlock block : currentVisible)
+            {
+                if (block == null || !isBlankScaleLabelText(block.text)) continue;
+                if (block.y > 180 && block.y < heightOfScreen - 80)
+                {
+                    labels.add(block.y);
+                }
+            }
+        }
+
+        if (labels.isEmpty()) return -1;
+        int sum = 0;
+        for (int y : labels) sum += y;
+        return sum / labels.size();
+    }
+
+    private boolean isBlankScaleLabelText(String raw)
+    {
+        if (raw == null || raw.trim().isEmpty()) return false;
+        String clean = HSQTools.removeAccents(raw).toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "");
+        return clean.contains("hoantoankhong")
+                || clean.contains("hoantoanco")
+                || clean.contains("totallydisagree")
+                || clean.contains("totallyagree")
+                || clean.contains("stronglydisagree")
+                || clean.contains("stronglyagree");
+    }
+
+    private List<android.graphics.Rect> chooseClickBlockBlankScaleRow(List<List<android.graphics.Rect>> rows, int targetY, int labelY, int answerValue)
+    {
+        if (rows == null || rows.isEmpty()) return null;
+
+        int bestScore = Integer.MIN_VALUE;
+        List<android.graphics.Rect> bestRow = null;
+
+        for (List<android.graphics.Rect> row : rows)
+        {
+            if (row == null || row.size() < 3) continue;
+            row.sort(Comparator.comparingInt(android.graphics.Rect::centerX));
+            if (clickBlockScaleAnswerIndex(row.size(), answerValue) < 0) continue;
+
+            int rowY = averageRectCenterY(row);
+            int span = row.get(row.size() - 1).right - row.get(0).left;
+            if (span < widthOfScreen * 0.35f) continue;
+            if (targetY > 0 && rowY < targetY + 40) continue;
+            if (targetY > 0 && rowY > targetY + 1550) continue;
+
+            int score = 0;
+            score += row.size() == 5 ? 1200 : 700 - Math.abs(row.size() - 5) * 80;
+            score += Math.min(300, span / 5);
+
+            if (labelY > 0)
+            {
+                int labelGap = labelY - rowY;
+                if (labelGap >= 20 && labelGap <= 460)
+                {
+                    score += 1100 - Math.abs(labelGap - 190) * 2;
+                }
+                else
+                {
+                    score -= 900 + Math.abs(labelGap);
+                }
+            }
+
+            if (targetY > 0)
+            {
+                score += Math.max(0, 900 - Math.abs(rowY - (targetY + 480)));
+            }
+
+            int rowCenterX = (row.get(0).centerX() + row.get(row.size() - 1).centerX()) / 2;
+            score -= Math.abs(rowCenterX - xCenter) / 8;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestRow = row;
+            }
+        }
+
+        return bestRow;
+    }
+
+    private int clickBlockScaleAnswerIndex(int rowSize, int answerValue)
+    {
+        if (rowSize <= 0) return -1;
+        if (answerValue >= 1 && answerValue <= rowSize) return answerValue - 1;
+        if (answerValue >= 0 && answerValue < rowSize) return answerValue;
+        return -1;
+    }
+
     private android.graphics.Point findClickBlockMatrixChoicePointFromXml(String headerStr, String answerStr, int targetY, List<HSQTools.TextBlock> currentVisible)
     {
         try
