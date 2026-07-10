@@ -4991,7 +4991,8 @@ public class StartAuto extends HSQService
             javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
             org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
-            List<String> parts = new ArrayList<>();
+            List<String> positionParts = new ArrayList<>();
+            List<String> textParts = new ArrayList<>();
 
             for (int i = 0; i < nodes.getLength(); i++)
             {
@@ -5008,11 +5009,13 @@ public class StartAuto extends HSQService
 
                 int bucketY = cy / 24;
                 int bucketX = rect.centerX() / 24;
-                parts.add(bucketY + ":" + bucketX + ":" + clean);
+                positionParts.add(bucketY + ":" + bucketX + ":" + clean);
+                textParts.add(clean);
             }
 
-            java.util.Collections.sort(parts);
-            return String.join("|", parts);
+            java.util.Collections.sort(positionParts);
+            java.util.Collections.sort(textParts);
+            return String.join("|", positionParts) + "\n@@TEXT@@\n" + String.join("|", textParts);
         }
         catch (Exception ignored)
         {
@@ -5028,15 +5031,180 @@ public class StartAuto extends HSQService
                 && !beforeXmlSignature.isEmpty()
                 && afterXmlSignature != null
                 && !afterXmlSignature.isEmpty()
-                && !beforeXmlSignature.equals(afterXmlSignature))
+                && !getAutoAdvancePositionSignature(beforeXmlSignature).equals(getAutoAdvancePositionSignature(afterXmlSignature)))
         {
-            return true;
+            if (isAutoAdvanceTextContentActuallyChanged(beforeXmlSignature, afterXmlSignature))
+            {
+                return true;
+            }
+            updateNotificationContent("AutoAdvance: chi thay doi vi tri/cuon man, van bam next tiep");
+            return false;
         }
 
         if (before == null || before.isEmpty()) return false;
         List<TextBlock> after = readAutoAdvanceScreenProbe();
         if (after.isEmpty()) return false;
-        return !HSQTools.areAlmostSame(before, after, 20);
+        if (HSQTools.areAlmostSame(before, after, 20)) return false;
+        return isTextBlockContentActuallyChanged(before, after);
+    }
+
+    private String getAutoAdvancePositionSignature(String signature)
+    {
+        if (signature == null) return "";
+        int marker = signature.indexOf("\n@@TEXT@@\n");
+        return marker >= 0 ? signature.substring(0, marker) : signature;
+    }
+
+    private String getAutoAdvanceContentSignature(String signature)
+    {
+        if (signature == null) return "";
+        int marker = signature.indexOf("\n@@TEXT@@\n");
+        return marker >= 0 ? signature.substring(marker + "\n@@TEXT@@\n".length()) : "";
+    }
+
+    private boolean isAutoAdvanceTextContentActuallyChanged(String beforeSignature, String afterSignature)
+    {
+        String beforeText = getAutoAdvanceContentSignature(beforeSignature);
+        String afterText = getAutoAdvanceContentSignature(afterSignature);
+        if (beforeText.isEmpty() || afterText.isEmpty()) return true;
+
+        if (hasProminentQuestionTextChanged(beforeText, afterText)) return true;
+
+        double overlap = calculateTextSignatureOverlap(beforeText, afterText);
+        return overlap < 0.62;
+    }
+
+    private boolean isTextBlockContentActuallyChanged(List<TextBlock> before, List<TextBlock> after)
+    {
+        String beforeText = buildTextBlockContentSignature(before);
+        String afterText = buildTextBlockContentSignature(after);
+        if (beforeText.isEmpty() || afterText.isEmpty()) return true;
+
+        double overlap = calculateTextSignatureOverlap(beforeText, afterText);
+        return overlap < 0.62;
+    }
+
+    private boolean hasProminentQuestionTextChanged(String beforeText, String afterText)
+    {
+        List<String> beforeLong = collectProminentQuestionTexts(beforeText);
+        List<String> afterLong = collectProminentQuestionTexts(afterText);
+        if (beforeLong.isEmpty() || afterLong.isEmpty()) return false;
+
+        boolean hasBeforeOnly = false;
+        for (String before : beforeLong)
+        {
+            if (!containsSimilarProminentText(afterLong, before))
+            {
+                hasBeforeOnly = true;
+                break;
+            }
+        }
+        if (!hasBeforeOnly) return false;
+
+        for (String after : afterLong)
+        {
+            if (!containsSimilarProminentText(beforeLong, after))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<String> collectProminentQuestionTexts(String signature)
+    {
+        List<String> result = new ArrayList<>();
+        if (signature == null || signature.isEmpty()) return result;
+
+        String[] parts = signature.split("\\|");
+        for (String part : parts)
+        {
+            if (part == null) continue;
+            String clean = part.trim();
+            if (clean.length() < 28) continue;
+            if (clean.matches("^(accessibilitystandardscompliant|chinhsachvequyenriengtu|privacypolicy)$")) continue;
+            result.add(clean);
+        }
+
+        result.sort((a, b) -> Integer.compare(b.length(), a.length()));
+        if (result.size() > 5)
+        {
+            return new ArrayList<>(result.subList(0, 5));
+        }
+        return result;
+    }
+
+    private boolean containsSimilarProminentText(List<String> list, String target)
+    {
+        if (list == null || target == null) return false;
+        for (String item : list)
+        {
+            if (item == null) continue;
+            if (item.equals(target)) return true;
+            if (item.length() >= 18 && target.length() >= 18)
+            {
+                if (item.contains(target) || target.contains(item)) return true;
+            }
+        }
+        return false;
+    }
+
+    private String buildTextBlockContentSignature(List<TextBlock> blocks)
+    {
+        if (blocks == null || blocks.isEmpty()) return "";
+        List<String> parts = new ArrayList<>();
+        for (TextBlock block : blocks)
+        {
+            if (block == null || block.text == null) continue;
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(block.text));
+            if (clean.isEmpty()) continue;
+            if (clean.matches("^(backbutton|offerwall|skiptomaincontent)$")) continue;
+            parts.add(clean);
+        }
+        java.util.Collections.sort(parts);
+        return String.join("|", parts);
+    }
+
+    private double calculateTextSignatureOverlap(String beforeText, String afterText)
+    {
+        Map<String, Integer> beforeCounts = buildSignatureCounts(beforeText);
+        Map<String, Integer> afterCounts = buildSignatureCounts(afterText);
+        if (beforeCounts.isEmpty() || afterCounts.isEmpty()) return 0.0;
+
+        int matched = 0;
+        int beforeTotal = 0;
+        int afterTotal = 0;
+        for (int count : beforeCounts.values()) beforeTotal += count;
+        for (int count : afterCounts.values()) afterTotal += count;
+
+        for (Map.Entry<String, Integer> entry : beforeCounts.entrySet())
+        {
+            Integer afterCount = afterCounts.get(entry.getKey());
+            if (afterCount != null)
+            {
+                matched += Math.min(entry.getValue(), afterCount);
+            }
+        }
+
+        int minTotal = Math.min(beforeTotal, afterTotal);
+        if (minTotal <= 0) return 0.0;
+        return matched / (double) minTotal;
+    }
+
+    private Map<String, Integer> buildSignatureCounts(String signature)
+    {
+        Map<String, Integer> counts = new HashMap<>();
+        if (signature == null || signature.isEmpty()) return counts;
+
+        String[] parts = signature.split("\\|");
+        for (String part : parts)
+        {
+            if (part == null) continue;
+            String clean = part.trim();
+            if (clean.isEmpty()) continue;
+            counts.put(clean, counts.getOrDefault(clean, 0) + 1);
+        }
+        return counts;
     }
 
     private boolean shouldRepairMissingChoiceBeforeNext(String[] splitStep, int stepIndex, String mainAnswer, String step)
@@ -7218,6 +7386,11 @@ public class StartAuto extends HSQService
                 // 🌟 TẦNG 2.2: LƯỚI QUÉT TIÊU CHUẨN (MẮT THẦN OCR)
                 if (shouldPreferPageNavigationXml)
                 {
+                    if (tryClickVisibleNextButtonFromSmartList(step, smartList, slVuot))
+                    {
+                        break checkButtonAgainLoop;
+                    }
+
                     if (tryClickITileNextButtonFromXml(step, smartList, slVuot))
                     {
                         break checkButtonAgainLoop;
@@ -8010,6 +8183,102 @@ public class StartAuto extends HSQService
         {
             return false;
         }
+    }
+
+    private boolean tryClickVisibleNextButtonFromSmartList(String step, List<HSQTools.TextBlock> smartList, int slVuot)
+    {
+        if (smartList == null || smartList.isEmpty()) return false;
+
+        HSQTools.TextBlock best = null;
+        int bestScore = Integer.MIN_VALUE;
+
+        for (HSQTools.TextBlock block : smartList)
+        {
+            if (block == null || block.text == null) continue;
+            if (block.y < heightOfScreen * 0.48f || block.y > heightOfScreen - 170) continue;
+
+            String raw = block.text.trim();
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+            if (clean.isEmpty()) continue;
+            if (clean.contains("accessibility") || clean.contains("standard") || clean.contains("compliant")) continue;
+
+            boolean exactNext = clean.matches("^(tieptheo|tiepthe|tieptuc|next|continue|submit|batdau|start|dongyvabatdau|agreeandcontinue)$");
+            boolean shortNext = clean.length() <= 30
+                    && (clean.contains("tieptheo")
+                    || clean.contains("tiepthe")
+                    || clean.contains("tieptuc")
+                    || clean.contains("next")
+                    || clean.contains("continue")
+                    || clean.contains("submit"));
+            if (!exactNext && !shortNext) continue;
+
+            if (isLikelyNextInstructionText(block, smartList)) continue;
+
+            int score = block.y;
+            if (exactNext) score += 5000;
+            if (block.x > widthOfScreen * 0.25f && block.x < widthOfScreen * 0.75f) score += 1200;
+            if (hasLikelyAccessibilityFooterBelow(block, smartList)) score += 900;
+            score -= Math.abs(block.x - widthOfScreen / 2) / 4;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = block;
+            }
+        }
+
+        if (best == null) return false;
+
+        String beforeSignature = getSmartScrollXmlSignature();
+        List<HSQTools.TextBlock> beforeClick = smartList.stream()
+                .filter(x -> x != null && x.y > 180)
+                .collect(Collectors.toList());
+
+        updateNotificationContent("OCR Next visible: bam [" + best.text + "] tai " + best.x + "," + best.y);
+        click(best.x, best.y, false);
+
+        if (didNavigationChangeQuick(beforeSignature, beforeClick))
+        {
+            tryNextAgain = 0;
+            return true;
+        }
+
+        updateNotificationContent("OCR Next visible: bam chua thay doi nhanh, giao lai cac tang cu");
+        return false;
+    }
+
+    private boolean isLikelyNextInstructionText(HSQTools.TextBlock candidate, List<HSQTools.TextBlock> smartList)
+    {
+        if (candidate == null || smartList == null) return false;
+        if (candidate.y > heightOfScreen * 0.68f) return false;
+
+        int nearbyTextCount = 0;
+        for (HSQTools.TextBlock block : smartList)
+        {
+            if (block == null || block == candidate || block.text == null) continue;
+            if (Math.abs(block.y - candidate.y) <= 140)
+            {
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(block.text));
+                if (clean.length() >= 10) nearbyTextCount++;
+            }
+        }
+        return nearbyTextCount >= 2;
+    }
+
+    private boolean hasLikelyAccessibilityFooterBelow(HSQTools.TextBlock candidate, List<HSQTools.TextBlock> smartList)
+    {
+        if (candidate == null || smartList == null) return false;
+        for (HSQTools.TextBlock block : smartList)
+        {
+            if (block == null || block.text == null) continue;
+            if (block.y <= candidate.y || block.y - candidate.y > 650) continue;
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(block.text));
+            if (clean.contains("accessibility") || clean.contains("standard") || clean.contains("compliant"))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean didNavigationChangeQuick(String beforeSignature, List<HSQTools.TextBlock> beforeClick)
