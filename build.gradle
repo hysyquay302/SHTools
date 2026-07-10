@@ -6,12 +6,12 @@ buildscript {
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.12.3'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0"44
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0"
     }
 }
 ext {
-    myVersionCode = 174
-    myVersionName = " 1.7.4"
+    myVersionCode = 175
+    myVersionName = " 1.7.5"
 }
 task clean(type: Delete) {
     delete rootProject.buildDir

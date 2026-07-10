@@ -1407,6 +1407,7 @@ public class StartAuto extends HSQService
                                                     String[] splitStep = java.util.Arrays.stream(validSplits.get(2).split(";(?![^{]*\\})"))
                                                             .filter(s -> s != null && !s.trim().isEmpty()).toArray(String[]::new);
                                                     boolean checkAutoAdvanceAfterChoice = shouldCheckAutoAdvanceAfterChoice(splitStep);
+                                                    String mainAnswerForSteps = splitTextAnswer.length > 1 ? splitTextAnswer[1] : "";
 
                                                     int totalClickToTextSteps = 0;
                                                     for (String rawStep : splitStep)
@@ -1435,23 +1436,38 @@ public class StartAuto extends HSQService
                                                         }
                                                         updateNotificationContent("thực hiện: " + step);
                                                         List<TextBlock> beforeAutoAdvanceChoice = null;
+                                                        String beforeAutoAdvanceXmlSignature = "";
                                                         if (checkAutoAdvanceAfterChoice && stepIndex == 0)
                                                         {
                                                             beforeAutoAdvanceChoice = readAutoAdvanceScreenProbe();
+                                                            beforeAutoAdvanceXmlSignature = readAutoAdvanceXmlTextSignature();
                                                         }
                                                         if (step.contains("clicktotext"))
                                                         {
                                                             Matcher match = Pattern.compile("\\{([^{}]+)\\}").matcher(step);
                                                             if (match.find())
                                                             {
+                                                                String clickToTextTarget = match.group(1);
+                                                                if (shouldSkipIntroConsentClickToTextBeforeNext(clickToTextTarget, splitStep, stepIndex, null))
+                                                                {
+                                                                    updateNotificationContent("Bo clicktotext dong y ao, chuyen qua nut tiep theo");
+                                                                    continue;
+                                                                }
+
                                                                 attemptedClickToTextSteps++;
 
-                                                                List<TextBlock> checkAnswer = clickToText(match.group(1));
+                                                                List<TextBlock> checkAnswer = clickToText(clickToTextTarget);
                                                                 if (checkAnswer != null)
                                                                 {
                                                                     lastClickToTextFailedScreen = checkAnswer.stream()
                                                                             .filter(x -> x.y > 180)
                                                                             .collect(Collectors.toList());
+
+                                                                    if (shouldSkipIntroConsentClickToTextBeforeNext(clickToTextTarget, splitStep, stepIndex, lastClickToTextFailedScreen))
+                                                                    {
+                                                                        updateNotificationContent("Bo clicktotext dong y ao sau khi scan, chuyen qua nut tiep theo");
+                                                                        continue;
+                                                                    }
 
                                                                     // Miss 1 cái thì bỏ qua, chỉ fail khi đã thử hết tất cả clicktotext mà vẫn chưa hit được cái nào
                                                                     if (successClickToTextSteps == 0 && attemptedClickToTextSteps >= totalClickToTextSteps)
@@ -1471,7 +1487,7 @@ public class StartAuto extends HSQService
                                                                 }
 
                                                                 successClickToTextSteps++;
-                                                                if (checkAutoAdvanceAfterChoice && stepIndex == 0 && didChoiceAutoAdvanceScreen(beforeAutoAdvanceChoice))
+                                                                if (checkAutoAdvanceAfterChoice && stepIndex == 0 && didChoiceAutoAdvanceScreen(beforeAutoAdvanceChoice, beforeAutoAdvanceXmlSignature))
                                                                 {
                                                                     updateNotificationContent("Click dap an da doi man, bo qua next di kem");
                                                                     currentState = STATE_GET_ANSWER;
@@ -1488,6 +1504,21 @@ public class StartAuto extends HSQService
                                                                 continue lamProfileLoop;
                                                             }
                                                             isNextCard = false;
+                                                            if (shouldRepairMissingChoiceBeforeNext(splitStep, stepIndex, mainAnswerForSteps, step))
+                                                            {
+                                                                List<TextBlock> beforeRepairChoice = readAutoAdvanceScreenProbe();
+                                                                String beforeRepairXmlSignature = readAutoAdvanceXmlTextSignature();
+                                                                if (tryClickMainAnswerBeforeLonelyNext(mainAnswerForSteps))
+                                                                {
+                                                                    if (didChoiceAutoAdvanceScreen(beforeRepairChoice, beforeRepairXmlSignature))
+                                                                    {
+                                                                        updateNotificationContent("Da chon dap an tu mainAnswer, man tu next -> bo clickbutton");
+                                                                        currentState = STATE_GET_ANSWER;
+                                                                        continue stateMachine;
+                                                                    }
+                                                                }
+                                                            }
+
                                                             List<TextBlock> currentVisible = clickButton(step);
                                                             if (currentVisible != null)
                                                             {
@@ -4940,13 +4971,342 @@ public class StartAuto extends HSQService
         }
     }
 
-    private boolean didChoiceAutoAdvanceScreen(List<TextBlock> before)
+    private String readAutoAdvanceXmlTextSignature()
     {
-        if (before == null || before.isEmpty()) return false;
+        try
+        {
+            return buildAutoAdvanceXmlTextSignature(HSQTools.getFlexibleXML());
+        }
+        catch (Exception ignored)
+        {
+            return "";
+        }
+    }
+
+    private String buildAutoAdvanceXmlTextSignature(String xml)
+    {
+        if (xml == null || xml.trim().isEmpty()) return "";
+        try
+        {
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+            List<String> parts = new ArrayList<>();
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String text = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(text));
+                if (clean.isEmpty()) continue;
+                if (clean.matches("^(backbutton|offerwall|skiptomaincontent)$")) continue;
+
+                android.graphics.Rect rect = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (rect == null) continue;
+                int cy = rect.centerY();
+                if (cy <= 180 || cy >= heightOfScreen - 50) continue;
+
+                int bucketY = cy / 24;
+                int bucketX = rect.centerX() / 24;
+                parts.add(bucketY + ":" + bucketX + ":" + clean);
+            }
+
+            java.util.Collections.sort(parts);
+            return String.join("|", parts);
+        }
+        catch (Exception ignored)
+        {
+            return "";
+        }
+    }
+
+    private boolean didChoiceAutoAdvanceScreen(List<TextBlock> before, String beforeXmlSignature)
+    {
         delay(1200);
+        String afterXmlSignature = readAutoAdvanceXmlTextSignature();
+        if (beforeXmlSignature != null
+                && !beforeXmlSignature.isEmpty()
+                && afterXmlSignature != null
+                && !afterXmlSignature.isEmpty()
+                && !beforeXmlSignature.equals(afterXmlSignature))
+        {
+            return true;
+        }
+
+        if (before == null || before.isEmpty()) return false;
         List<TextBlock> after = readAutoAdvanceScreenProbe();
         if (after.isEmpty()) return false;
         return !HSQTools.areAlmostSame(before, after, 20);
+    }
+
+    private boolean shouldRepairMissingChoiceBeforeNext(String[] splitStep, int stepIndex, String mainAnswer, String step)
+    {
+        if (splitStep == null || splitStep.length != 1 || stepIndex != 0) return false;
+        if (!isTrailingPageNextButton(step)) return false;
+        return isLikelyChoiceMainAnswer(mainAnswer);
+    }
+
+    private boolean shouldSkipIntroConsentClickToTextBeforeNext(String targetText, String[] splitStep, int stepIndex, List<TextBlock> visibleScreen)
+    {
+        String targetNorm = cleanClickToTextMatchText(targetText);
+        if (!("co".equals(targetNorm) || "yes".equals(targetNorm))) return false;
+        if (!hasLaterTrailingPageNext(splitStep, stepIndex)) return false;
+
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (findShortYesNoClickToTextChoicePoint(targetText, xml) != null) return false;
+            return isIntroConsentScreenWithOnlyNext(xml, visibleScreen);
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+    }
+
+    private boolean hasLaterTrailingPageNext(String[] splitStep, int stepIndex)
+    {
+        if (splitStep == null) return false;
+        for (int i = stepIndex + 1; i < splitStep.length; i++)
+        {
+            if (isTrailingPageNextButton(splitStep[i])) return true;
+        }
+        return false;
+    }
+
+    private boolean isIntroConsentScreenWithOnlyNext(String xml, List<TextBlock> visibleScreen)
+    {
+        boolean hasNextButton = false;
+        boolean hasChoiceControl = false;
+        boolean hasStandaloneAgree = false;
+        StringBuilder allText = new StringBuilder();
+
+        try
+        {
+            if (xml != null && !xml.trim().isEmpty())
+            {
+                javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+                org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+                for (int i = 0; i < nodes.getLength(); i++)
+                {
+                    org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                    String text = node.getAttribute("text");
+                    String desc = node.getAttribute("content-desc");
+                    String raw = ((text == null ? "" : text) + " " + (desc == null ? "" : desc)).trim();
+                    String clean = cleanClickToTextMatchText(raw);
+                    if (!clean.isEmpty()) allText.append(' ').append(clean);
+
+                    android.graphics.Rect rect = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                    String clazz = node.getAttribute("class");
+                    String clazzLower = clazz == null ? "" : clazz.toLowerCase(Locale.ROOT);
+                    boolean control = "true".equals(node.getAttribute("checkable"))
+                            || clazzLower.contains("radiobutton")
+                            || clazzLower.contains("checkbox")
+                            || clazzLower.contains("compoundbutton");
+                    if (control) hasChoiceControl = true;
+
+                    if (rect == null) continue;
+
+                    boolean interactive = "true".equals(node.getAttribute("clickable"))
+                            || "true".equals(node.getAttribute("focusable"))
+                            || clazzLower.contains("button");
+                    if (interactive
+                            && rect.centerY() > heightOfScreen * 0.45f
+                            && clean.matches(".*(ketiep|tieptuc|tieptheo|next|continue|batdau|start).*"))
+                    {
+                        hasNextButton = true;
+                    }
+
+                    if (("co".equals(clean) || "yes".equals(clean))
+                            && rect.height() < 220
+                            && rect.width() < widthOfScreen * 0.55f)
+                    {
+                        hasStandaloneAgree = true;
+                    }
+                }
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+
+        if (visibleScreen != null)
+        {
+            for (TextBlock block : visibleScreen)
+            {
+                if (block == null || block.text == null) continue;
+                String clean = cleanClickToTextMatchText(block.text);
+                if (!clean.isEmpty()) allText.append(' ').append(clean);
+                if (("co".equals(clean) || "yes".equals(clean))
+                        && block.y > 180
+                        && block.y < heightOfScreen - 50)
+                {
+                    hasStandaloneAgree = true;
+                }
+            }
+        }
+
+        String screenText = allText.toString();
+        boolean consentIntro = (screenText.contains("dongy") || screenText.contains("xacnhandongy") || screenText.contains("agree") || screenText.contains("consent"))
+                && (screenText.contains("vuilongchonco") || screenText.contains("chonco") || screenText.contains("khaosat") || screenText.contains("thamgia"));
+        return consentIntro && hasNextButton && !hasChoiceControl && !hasStandaloneAgree;
+    }
+
+    private boolean isLikelyChoiceMainAnswer(String mainAnswer)
+    {
+        if (mainAnswer == null) return false;
+        String raw = mainAnswer.trim();
+        if (raw.isEmpty()) return false;
+
+        String clean = cleanClickToTextMatchText(raw);
+        if (clean.isEmpty()) return false;
+
+        if (clean.matches("^(tiep|tieptuc|tieptheo|next|continue|submit|done|xong|ok|okay|batdau|start|swipemore|captcha|modanhsach|localbrain)$"))
+        {
+            return false;
+        }
+
+        if (isShortYesNoClickToTextTarget(clean)) return true;
+        if (raw.matches(".*[\\d><=].*")) return true;
+        if (raw.contains("-") || raw.contains("–") || raw.contains("—")) return true;
+        return clean.length() >= 4;
+    }
+
+    private boolean tryClickMainAnswerBeforeLonelyNext(String mainAnswer)
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            android.graphics.Point point = findShortYesNoClickToTextChoicePoint(mainAnswer, xml);
+            if (point == null)
+            {
+                point = findSelectableMainAnswerPointFromXml(mainAnswer, xml);
+            }
+            if (point == null) return false;
+
+            updateNotificationContent("Auto repair: chon mainAnswer [" + mainAnswer + "] truoc khi next tai " + point.x + "," + point.y);
+            click(point.x, point.y, false);
+            delay(1000);
+            return true;
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+    }
+
+    private android.graphics.Point findSelectableMainAnswerPointFromXml(String mainAnswer, String xml)
+    {
+        if (xml == null || xml.trim().isEmpty()) return null;
+
+        String targetNorm = cleanClickToTextMatchText(mainAnswer);
+        if (targetNorm.isEmpty()) return null;
+
+        try
+        {
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            android.graphics.Rect bestTextRect = null;
+            android.graphics.Rect bestClickRect = null;
+            int bestScore = Integer.MAX_VALUE;
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String rawText = ((node.getAttribute("text") == null ? "" : node.getAttribute("text")) + " " +
+                        (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).trim();
+                if (!isExactClickToTextText(rawText, targetNorm)) continue;
+
+                android.graphics.Rect textRect = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (textRect == null || textRect.width() <= 0 || textRect.height() <= 0) continue;
+                if (textRect.centerY() <= 180 || textRect.centerY() >= heightOfScreen - 50 || textRect.centerY() <= clickToTextMinY) continue;
+
+                android.graphics.Rect clickRect = findClickableChoiceRectForAnswer(nodes, textRect);
+                if (clickRect == null) continue;
+
+                int score = Math.abs(clickRect.centerY() - textRect.centerY()) * 8;
+                score += Math.abs(clickRect.centerX() - textRect.centerX()) / 12;
+                score += Math.max(0, clickRect.height() - 260);
+                if (clickRect.contains(textRect.centerX(), textRect.centerY())) score -= 500;
+                if (clickRect.width() >= textRect.width()) score -= 80;
+
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestTextRect = textRect;
+                    bestClickRect = clickRect;
+                }
+            }
+
+            if (bestClickRect == null || bestTextRect == null) return null;
+
+            int clickX = bestClickRect.centerX();
+            int clickY = bestTextRect.centerY();
+            if (clickY < bestClickRect.top + 12 || clickY > bestClickRect.bottom - 12)
+            {
+                clickY = bestClickRect.centerY();
+            }
+            return new android.graphics.Point(clickX, clickY);
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
+    private android.graphics.Rect findClickableChoiceRectForAnswer(org.w3c.dom.NodeList nodes, android.graphics.Rect textRect)
+    {
+        if (nodes == null || textRect == null) return null;
+
+        android.graphics.Rect best = null;
+        int bestScore = Integer.MAX_VALUE;
+
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+            if ("false".equals(node.getAttribute("enabled"))) continue;
+
+            String clazz = node.getAttribute("class");
+            String clazzLower = clazz == null ? "" : clazz.toLowerCase(Locale.ROOT);
+            boolean interactive = "true".equals(node.getAttribute("clickable"))
+                    || "true".equals(node.getAttribute("focusable"))
+                    || "true".equals(node.getAttribute("checkable"))
+                    || clazzLower.contains("button")
+                    || clazzLower.contains("checkbox")
+                    || clazzLower.contains("radio");
+            if (!interactive) continue;
+            if (clazzLower.contains("webview") || clazzLower.contains("framelayout") || clazzLower.contains("linearlayout")) continue;
+
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+            if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+            if (r.centerY() <= 180 || r.centerY() >= heightOfScreen - 50 || r.centerY() <= clickToTextMinY) continue;
+            if (r.height() < 24 || r.height() > 520) continue;
+            if (r.width() < 40 || r.width() > widthOfScreen * 0.96f) continue;
+
+            boolean containsCenter = r.contains(textRect.centerX(), textRect.centerY());
+            boolean sameRow = Math.abs(r.centerY() - textRect.centerY()) <= Math.max(80, textRect.height());
+            boolean overlapsX = r.right >= textRect.left - 80 && r.left <= textRect.right + 80;
+            if (!containsCenter && !(sameRow && overlapsX)) continue;
+
+            int score = Math.abs(r.centerY() - textRect.centerY()) * 10;
+            score += Math.abs(r.centerX() - textRect.centerX()) / 8;
+            score += Math.abs(r.height() - Math.max(80, textRect.height())) / 2;
+            if (containsCenter) score -= 600;
+            if ("true".equals(node.getAttribute("clickable"))) score -= 180;
+            if ("true".equals(node.getAttribute("checkable"))) score -= 120;
+
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = r;
+            }
+        }
+
+        return best;
     }
 
     /**
@@ -5309,6 +5669,15 @@ public class StartAuto extends HSQService
 
                     // Gọi vũ khí tìm kiếm tối thượng từ HSQLibrary (Mức độ tái sử dụng cao nhất, không truyền minY)
                     String currentXmlForCheck = HSQTools.getFlexibleXML();
+                    android.graphics.Point shortChoicePoint = findShortYesNoClickToTextChoicePoint(textWantToClick, currentXmlForCheck);
+                    if (shortChoicePoint != null)
+                    {
+                        updateNotificationContent("Click Text XML Radio: Chot [" + textWantToClick + "] tai " + shortChoicePoint.x + "," + shortChoicePoint.y);
+                        click(shortChoicePoint.x, shortChoicePoint.y, false);
+                        clickToTextMinY = shortChoicePoint.y;
+                        break timTextLoop;
+                    }
+
                     HSQTools.TextBlock target = findStrictClickToTextTarget(textWantToClick, checkAnswer, currentXmlForCheck);
                     if (target == null)
                     {
@@ -5682,6 +6051,167 @@ public class StartAuto extends HSQService
     {
         if (rawText == null) return "";
         return HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawText));
+    }
+
+    private android.graphics.Point findShortYesNoClickToTextChoicePoint(String textWantToClick, String xml)
+    {
+        if (xml == null || xml.trim().isEmpty()) return null;
+
+        String targetNorm = cleanClickToTextMatchText(textWantToClick);
+        if (!isShortYesNoClickToTextTarget(targetNorm)) return null;
+
+        try
+        {
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            android.graphics.Rect bestChoice = null;
+            android.graphics.Rect bestControl = null;
+            int bestScore = Integer.MAX_VALUE;
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                android.graphics.Rect choiceRect = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (choiceRect == null || choiceRect.width() <= 0 || choiceRect.height() <= 0) continue;
+                if (choiceRect.centerY() <= 180 || choiceRect.centerY() >= heightOfScreen - 50 || choiceRect.centerY() <= clickToTextMinY) continue;
+                if (choiceRect.height() > 420 || choiceRect.width() < 40) continue;
+
+                String raw = ((node.getAttribute("text") == null ? "" : node.getAttribute("text")) + " " +
+                        (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).trim();
+                String choiceNorm = cleanShortChoiceCandidateText(raw);
+                if (!isShortYesNoChoiceLabelMatch(choiceNorm, targetNorm)) continue;
+
+                android.graphics.Rect controlRect = findChoiceControlNearRow(nodes, choiceRect);
+                if (controlRect == null) continue;
+
+                int score = Math.abs(controlRect.centerY() - choiceRect.centerY()) * 8;
+                score += Math.abs(controlRect.centerX() - choiceRect.left) / 3;
+                if (choiceNorm.equals(targetNorm)) score -= 300;
+                if (choiceNorm.startsWith(targetNorm)) score -= 160;
+                if (raw.toLowerCase(Locale.ROOT).contains("radiobutton") || raw.toLowerCase(Locale.ROOT).contains("checkbox")) score -= 120;
+
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestChoice = choiceRect;
+                    bestControl = controlRect;
+                }
+            }
+
+            if (bestControl != null)
+            {
+                return new android.graphics.Point(bestControl.centerX(), bestControl.centerY());
+            }
+            if (bestChoice != null)
+            {
+                return new android.graphics.Point(bestChoice.left + Math.min(90, Math.max(35, bestChoice.width() / 10)), bestChoice.centerY());
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return null;
+    }
+
+    private boolean isShortYesNoClickToTextTarget(String targetNorm)
+    {
+        return "co".equals(targetNorm)
+                || "khong".equals(targetNorm)
+                || "yes".equals(targetNorm)
+                || "no".equals(targetNorm);
+    }
+
+    private String cleanShortChoiceCandidateText(String raw)
+    {
+        if (raw == null) return "";
+        String repaired = raw
+                .replace("Ã“", "O")
+                .replace("Ã³", "o")
+                .replace("Ã”", "O")
+                .replace("Ã´", "o");
+        String clean = cleanClickToTextMatchText(repaired);
+        String[] prefixes = new String[]{
+                "radiobuttonoff", "radiobuttonon", "radiooff", "radioon",
+                "checkboxoff", "checkboxon", "unchecked", "checked",
+                "selected", "notselected"
+        };
+
+        boolean changed;
+        do
+        {
+            changed = false;
+            for (String prefix : prefixes)
+            {
+                if (clean.startsWith(prefix))
+                {
+                    clean = clean.substring(prefix.length());
+                    changed = true;
+                }
+            }
+        } while (changed);
+
+        return clean;
+    }
+
+    private boolean isShortYesNoChoiceLabelMatch(String choiceNorm, String targetNorm)
+    {
+        if (choiceNorm == null || choiceNorm.isEmpty() || targetNorm == null || targetNorm.isEmpty()) return false;
+        if (choiceNorm.equals(targetNorm) || HSQTools.equalsOcrFriendly(choiceNorm, targetNorm)) return true;
+        if (!choiceNorm.startsWith(targetNorm)) return false;
+
+        if ("co".equals(targetNorm))
+        {
+            return !choiceNorm.startsWith("cong") && !choiceNorm.startsWith("con") && !choiceNorm.startsWith("contact");
+        }
+        if ("no".equals(targetNorm))
+        {
+            return !choiceNorm.startsWith("not");
+        }
+        return true;
+    }
+
+    private android.graphics.Rect findChoiceControlNearRow(org.w3c.dom.NodeList nodes, android.graphics.Rect choiceRect)
+    {
+        if (nodes == null || choiceRect == null) return null;
+
+        android.graphics.Rect best = null;
+        int bestScore = Integer.MAX_VALUE;
+
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+            if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+            if (r.centerY() <= 180 || r.centerY() >= heightOfScreen - 50 || r.centerY() <= clickToTextMinY) continue;
+
+            String clazz = node.getAttribute("class");
+            String clazzLower = clazz == null ? "" : clazz.toLowerCase(Locale.ROOT);
+            boolean control = "true".equals(node.getAttribute("checkable"))
+                    || clazzLower.contains("radiobutton")
+                    || clazzLower.contains("checkbox")
+                    || clazzLower.contains("compoundbutton");
+            if (!control) continue;
+            if ("false".equals(node.getAttribute("enabled"))) continue;
+
+            int dy = Math.abs(r.centerY() - choiceRect.centerY());
+            if (dy > Math.max(70, choiceRect.height() / 2 + 24)) continue;
+            if (r.width() > widthOfScreen * 0.45f || r.height() > 220) continue;
+            if (r.right < choiceRect.left - 220 || r.left > choiceRect.right + 220) continue;
+
+            int score = dy * 10 + Math.max(0, r.centerX() - choiceRect.centerX()) / 2 + Math.abs(r.centerX() - choiceRect.left) / 4;
+            if (r.centerX() <= choiceRect.centerX()) score -= 120;
+            if (clazzLower.contains("radiobutton") || clazzLower.contains("checkbox")) score -= 180;
+
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = r;
+            }
+        }
+
+        return best;
     }
 
     private void safeSwipeClickToText(int fromY, int toY)
