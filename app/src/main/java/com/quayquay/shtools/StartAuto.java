@@ -1343,6 +1343,7 @@ public class StartAuto extends HSQService
 
                                                 List<HSQTools.TextBlock> beforeSwipe = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
                                                 getTopText(beforeSwipe);
+                                                boolean normalSwipeSafeFallbackTried = false;
 
                                                 while (true)
                                                 {
@@ -1352,13 +1353,22 @@ public class StartAuto extends HSQService
                                                     }
                                                     else
                                                     {
-                                                        smartScroll(ysBot, ysTop, "swipemore");
+                                                        defaultLocalBlindSwipeForward();
                                                     }
                                                     delay(3000);
 
                                                     screenBegin = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
 
                                                     boolean almostSameAfterSwipe = HSQTools.areAlmostSame(beforeSwipe, screenBegin, 20);
+                                                    if (almostSameAfterSwipe && !swipeDropdown && screenSwipe == 0 && !normalSwipeSafeFallbackTried && screenSwipe < MAX_LOCAL_BLIND_IMAGES - 1)
+                                                    {
+                                                        normalSwipeSafeFallbackTried = true;
+                                                        updateNotificationContent("Swipemore default khong doi, thu safe swipe 1 lan");
+                                                        trySafeSwipemoreFallbackForward();
+                                                        delay(2200);
+                                                        screenBegin = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                                                        almostSameAfterSwipe = HSQTools.areAlmostSame(beforeSwipe, screenBegin, 20);
+                                                    }
                                                     if (almostSameAfterSwipe && swipeDropdown && screenSwipe < MAX_LOCAL_BLIND_IMAGES - 1)
                                                     {
                                                         forceDropdownSwipeForward();
@@ -5808,6 +5818,7 @@ public class StartAuto extends HSQService
         {
             List<TextBlock> temp = new ArrayList<>();
             int vuotLenLai = 0, checkLaiScreen = 0;
+            int sameScreenForcedDirectionRetries = 0;
 
             timTextLoop:
             while (true)
@@ -5822,7 +5833,23 @@ public class StartAuto extends HSQService
                     // Logic chống kẹt màn hình
                     if (HSQTools.areAlmostSame(temp, checkAnswer, 20))
                     {
-                        if (vuotLenLai == 0)
+                        int forcedDirection = getClickToTextScrollDirection(textWantToClick, checkAnswer);
+                        if (forcedDirection != 0 && sameScreenForcedDirectionRetries < 2)
+                        {
+                            sameScreenForcedDirectionRetries++;
+                            updateNotificationContent("ClickText: man hinh dung yen nhung target con o " + (forcedDirection > 0 ? "duoi" : "tren") + ", ep vuot tiep");
+                            if (forcedDirection > 0)
+                            {
+                                safeSwipeClickToText(ysBot, ysTop);
+                            }
+                            else
+                            {
+                                safeSwipeClickToText(ysTop, ysBot);
+                            }
+                            delay(2000);
+                            clickToTextMinY = 0;
+                        }
+                        else if (vuotLenLai == 0)
                         {
                             vuotLenLai++;
                             safeSwipeClickToText(ysTop, ysBot);
@@ -5954,7 +5981,7 @@ public class StartAuto extends HSQService
                     }
                     checkLaiScreen = 0;
                     temp = checkAnswer;
-                    int numericScrollDirection = getNumericClickToTextScrollDirection(textWantToClick, checkAnswer);
+                    int numericScrollDirection = getClickToTextScrollDirection(textWantToClick, checkAnswer);
                     if (numericScrollDirection > 0)
                     {
                         safeSwipeClickToText(ysBot, ysTop);
@@ -5981,9 +6008,68 @@ public class StartAuto extends HSQService
         return null;
     }
 
+    private int getClickToTextScrollDirection(String textWantToClick, List<TextBlock> visibleBlocks)
+    {
+        int xmlDirection = getXmlExactClickToTextScrollDirection(textWantToClick);
+        if (xmlDirection != 0) return xmlDirection;
+        return getNumericClickToTextScrollDirection(textWantToClick, visibleBlocks);
+    }
+
+    private int getXmlExactClickToTextScrollDirection(String textWantToClick)
+    {
+        String targetNorm = cleanClickToTextMatchText(textWantToClick);
+        if (targetNorm.isEmpty()) return 0;
+
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return 0;
+
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            boolean foundAbove = false;
+            boolean foundBelow = false;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String rawText = ((node.getAttribute("text") == null ? "" : node.getAttribute("text")) + " " +
+                        (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).trim();
+                if (!isExactClickToTextText(rawText, targetNorm)) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null) continue;
+
+                if (r.centerY() > 180 && r.centerY() < heightOfScreen - 80 && r.height() > 8)
+                {
+                    return 0;
+                }
+                if (r.top >= heightOfScreen - 100 || r.centerY() >= heightOfScreen - 90 || r.height() <= 2 && r.top >= heightOfScreen - 120)
+                {
+                    foundBelow = true;
+                }
+                else if (r.bottom <= 190 || r.centerY() <= 190)
+                {
+                    foundAbove = true;
+                }
+            }
+
+            if (foundBelow && !foundAbove) return 1;
+            if (foundAbove && !foundBelow) return -1;
+        }
+        catch (Exception ignored)
+        {
+        }
+        return 0;
+    }
+
     private int getNumericClickToTextScrollDirection(String textWantToClick, List<TextBlock> visibleBlocks)
     {
         String targetClean = HSQTools.getOnlyDigits(textWantToClick);
+        int moneyDirection = getMoneyRangeClickToTextScrollDirection(textWantToClick, visibleBlocks);
+        if (moneyDirection != 0) return moneyDirection;
+
         if (!targetClean.matches("(19|20)\\d{2}")) return 0;
 
         int targetYear;
@@ -6048,6 +6134,62 @@ public class StartAuto extends HSQService
         if (targetYear < min) return increasingDown ? -1 : 1;
         if (targetYear > max) return increasingDown ? 1 : -1;
         return 0;
+    }
+
+    private int getMoneyRangeClickToTextScrollDirection(String textWantToClick, List<TextBlock> visibleBlocks)
+    {
+        List<Long> targetAmounts = extractLargeAmounts(textWantToClick);
+        if (targetAmounts.isEmpty()) return 0;
+
+        long targetAnchor = targetAmounts.get(0);
+        if (targetAnchor < 1000000L) return 0;
+
+        long visibleMin = Long.MAX_VALUE;
+        long visibleMax = Long.MIN_VALUE;
+        boolean hasVisibleAmount = false;
+
+        if (visibleBlocks != null)
+        {
+            for (TextBlock block : visibleBlocks)
+            {
+                if (block == null || block.text == null || block.y <= 180 || block.y >= heightOfScreen - 50) continue;
+                List<Long> amounts = extractLargeAmounts(block.text);
+                for (Long amount : amounts)
+                {
+                    if (amount == null || amount < 1000000L) continue;
+                    hasVisibleAmount = true;
+                    visibleMin = Math.min(visibleMin, amount);
+                    visibleMax = Math.max(visibleMax, amount);
+                }
+            }
+        }
+
+        if (!hasVisibleAmount) return 0;
+        if (targetAnchor > visibleMax) return 1;
+        if (targetAnchor < visibleMin) return -1;
+        return 0;
+    }
+
+    private List<Long> extractLargeAmounts(String text)
+    {
+        List<Long> result = new ArrayList<>();
+        if (text == null) return result;
+
+        Matcher matcher = Pattern.compile("\\d[\\d,.]*").matcher(text);
+        while (matcher.find())
+        {
+            String raw = matcher.group();
+            String digits = raw.replaceAll("\\D", "");
+            if (digits.length() < 4) continue;
+            try
+            {
+                result.add(Long.parseLong(digits));
+            }
+            catch (Exception ignored)
+            {
+            }
+        }
+        return result;
     }
 
     private HSQTools.TextBlock findStrictClickToTextTarget(String textWantToClick, List<TextBlock> checkAnswer, String currentXmlForCheck)
@@ -6384,7 +6526,72 @@ public class StartAuto extends HSQService
 
     private void safeSwipeClickToText(int fromY, int toY)
     {
-        smartScroll(fromY, toY, "clicktotext");
+        int safeFromY = Math.max(220, Math.min(heightOfScreen - 180, fromY));
+        int safeToY = Math.max(220, Math.min(heightOfScreen - 180, toY));
+        int defaultX = Math.max(24, Math.min(widthOfScreen - 24, xCenter));
+        int duration = Math.max(350, Math.min(2000, Math.abs(safeFromY - safeToY)));
+
+        List<TextBlock> beforeSwipe = readAutoAdvanceScreenProbe();
+        updateNotificationContent("ClickText default swipe: " + defaultX + "," + safeFromY + " -> " + safeToY);
+        if (!ASBLBridgeService.swipeStraight(defaultX, safeFromY, defaultX, safeToY, duration))
+        {
+            swipe(defaultX, safeFromY, defaultX, safeToY, duration);
+        }
+
+        delay(900);
+        List<TextBlock> afterDefault = readAutoAdvanceScreenProbe();
+        if (beforeSwipe != null && !beforeSwipe.isEmpty() && afterDefault != null && !afterDefault.isEmpty()
+                && !HSQTools.areAlmostSame(beforeSwipe, afterDefault, 20))
+        {
+            return;
+        }
+
+        int safeX = findSafeSwipeXForClickToText(safeFromY, safeToY);
+        int safeFallbackFromY = findSafeSwipeYForClickToText(safeX, safeFromY);
+        updateNotificationContent("ClickText safe fallback swipe: " + safeX + "," + safeFallbackFromY + " -> " + safeToY);
+        if (!ASBLBridgeService.swipeStraight(safeX, safeFallbackFromY, safeX, safeToY, duration))
+        {
+            swipe(safeX, safeFallbackFromY, safeX, safeToY, duration);
+        }
+    }
+
+    private void defaultLocalBlindSwipeForward()
+    {
+        int safeX = Math.max(24, Math.min(widthOfScreen - 24, xs));
+        int safeFromY = Math.max(220, Math.min(heightOfScreen - 180, ysBot));
+        int safeToY = Math.max(220, Math.min(heightOfScreen - 180, ysTop));
+        int duration = Math.max(350, Math.min(2000, swipeDuration));
+
+        updateNotificationContent("Swipemore default: " + safeX + "," + safeFromY + " -> " + safeToY);
+        if (!ASBLBridgeService.swipeStraight(safeX, safeFromY, safeX, safeToY, duration))
+        {
+            swipe(safeX, safeFromY, safeX, safeToY, duration);
+        }
+    }
+
+    private void trySafeSwipemoreFallbackForward()
+    {
+        int safeFromY = Math.max(220, Math.min(heightOfScreen - 180, ysBot));
+        int safeToY = Math.max(220, Math.min(heightOfScreen - 180, ysTop));
+        int safeX = findSafeSwipeXForClickToText(safeFromY, safeToY);
+        safeFromY = findSafeSwipeYForClickToText(safeX, safeFromY);
+
+        if (safeFromY - safeToY < 220)
+        {
+            safeFromY = Math.max(220, Math.min(heightOfScreen - 180, yBot));
+            safeToY = Math.max(220, Math.min(heightOfScreen - 180, yTop));
+        }
+
+        xs = safeX;
+        ysBot = safeFromY;
+        ysTop = safeToY;
+        swipeDuration = Math.max(350, Math.min(2000, Math.abs(ysBot - ysTop)));
+
+        updateNotificationContent("Swipemore safe fallback: " + xs + "," + ysBot + " -> " + ysTop);
+        if (!ASBLBridgeService.swipeStraight(xs, ysBot, xs, ysTop, swipeDuration))
+        {
+            swipe(xs, ysBot, xs, ysTop, swipeDuration);
+        }
     }
 
     private boolean smartScroll(int fromY, int toY, String reason)
