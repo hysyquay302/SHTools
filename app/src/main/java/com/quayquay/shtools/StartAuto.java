@@ -2,7 +2,6 @@ package com.quayquay.shtools;
 
 import static com.quayquay.shtools.extention.ASUtils.delay;
 import static com.quayquay.shtools.services.ASBLBridgeService.clearrecents;
-import static com.quayquay.shtools.services.ASBLBridgeService.findAndClickByTextDes;
 import static com.quayquay.shtools.services.ASBLBridgeService.findMultiTextDes;
 import static com.quayquay.shtools.services.ASBLBridgeService.globalBack;
 import static com.quayquay.shtools.services.ASBLBridgeService.globalHome;
@@ -81,7 +80,7 @@ public class StartAuto extends HSQService
     private static int apkVersion = 0;
     private static int remotePromtVersion = 0;
     private String apiRun = "", localServerIp = "", idTelegram = "", customAgentRule = "", textAnswer = "", topText = "", AIWebSite, AIApiKey, aiModel,
-            AIWebSite1 = "", AIApiKey1 = "", aiModel1 = "", AIWebSite2 = "", AIApiKey2 = "", aiModel2 = "";
+            AIWebSite1 = "", AIApiKey1 = "", aiModel1 = "", AIWebSite2 = "", AIApiKey2 = "", aiModel2 = "", serveyApp = "";
     private boolean AIProxyEnabled = false;
     private String AIProxyUrl = "https://quaykute.id.vn";
 
@@ -256,6 +255,12 @@ public class StartAuto extends HSQService
             startTool:
             while (true)
             {
+                updateTitle(shortDeviceID);
+                updateNotificationTitle(shortDeviceID);
+                updateNotificationContent("Ready...");
+                delay(2000);
+                loadControl();
+
                 widthOfScreen = ASBLBridgeService.widthOfScreen;
                 if (widthOfScreen == 0) { // Nếu bằng 0 tức là ASBL chưa nạp xong, chờ tí
                     delay(500);
@@ -263,15 +268,16 @@ public class StartAuto extends HSQService
                 }
                 xCenter = ASBLBridgeService.xCenter;
                 heightOfScreen = ASBLBridgeService.heightOfScreen;
-                yTop = ASBLBridgeService.yTop;
+                if(serveyApp.contains("bituro"))
+                {
+                    yTop = heightOfScreen * 30 / 100;
+                }
+                else if(serveyApp.contains("heycash")){
+                    yTop = heightOfScreen * 50 / 100;
+                }
                 yBot = ASBLBridgeService.yBot;
                 yCenter = ASBLBridgeService.yCenter;
 
-                updateTitle(shortDeviceID);
-                updateNotificationTitle(shortDeviceID);
-                updateNotificationContent("Ready...");
-                delay(2000);
-                loadControl();
 
                 String baseRule = HSQFileHelper.readTextFile("/sdcard/Servey/PromtGem.txt");
                 if (profileData.length() < 5)
@@ -309,7 +315,15 @@ public class StartAuto extends HSQService
                         }
                     }
 
-                    customAgentRule = baseRule + "\n\nĐÂY LÀ THÔNG TIN CÁ NHÂN CỦA BẠN (HÃY BÁM SÁT VÀO ĐÂY ĐỂ TRẢ LỜI KHẢO SÁT):\n" + profileData;
+                    String dependentLocationRule = "\n\nQUY TAC BAT BUOC VE DIA CHI PHU THUOC: "
+                            + "Neu cung man hinh co Tinh/Thanh va Quan/Huyen, phai chon xong Tinh/Thanh truoc. "
+                            + "Nhip 1: khi o Tinh/Thanh con placeholder (Vui long lua chon/Please select), CHI tra loi 1 step dropdown mo Tinh/Thanh roi |end; "
+                            + "cam clicktotext gia tri tinh va cam xu ly Quan/Huyen trong cung cau tra loi. "
+                            + "Nhip 2: khi anh moi cho thay danh sach tinh da mo, CHI clicktotext dung Tinh/Thanh roi |end. "
+                            + "Nhip 3: chi tren anh tiep theo, khi control Tinh/Thanh da hien gia tri that thay placeholder, moi duoc xu ly Quan/Huyen. "
+                            + "Neu Quan/Huyen la o go 2-3 ky tu de hien goi y thi van phai doi Tinh/Thanh hoan tat truoc.";
+                    customAgentRule = baseRule + dependentLocationRule
+                            + "\n\nĐÂY LÀ THÔNG TIN CÁ NHÂN CỦA BẠN (HÃY BÁM SÁT VÀO ĐÂY ĐỂ TRẢ LỜI KHẢO SÁT):\n" + profileData;
                 }
                 if (AIHelper == null)
                 {
@@ -337,7 +351,15 @@ public class StartAuto extends HSQService
                     String tempTextAnswer = "";
                     boolean daClick, screenDif;
                     String PACK_BITURO = "com.bituro.android.bituro";
-                    boolean isAppOpen = HSQTools.isAppOpening(PACK_BITURO);
+                    boolean isAppOpen = false;
+                    if(serveyApp.contains("bituro"))
+                    {
+                        isAppOpen = HSQTools.isAppOpening(PACK_BITURO);
+                    }
+                    else if(serveyApp.contains("heycash"))
+                    {
+                        isAppOpen = true;
+                    }
                     if (!isAppOpen)
                     {
                         clearrecents();
@@ -1584,6 +1606,16 @@ public class StartAuto extends HSQService
                                                                 // --- INTERCEPTOR: NẮN NÃO AI NẾU NÓ NHẬP NGU CẤP HÀNH CHÍNH ---
                                                                 String labelLower = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(labelToFind));
                                                                 String valueLower = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(valueToInput));
+                                                                if (isDistrictLocationField(labelLower) && isProvinceSelectionPendingInXml())
+                                                                {
+                                                                    handleActionFailure(
+                                                                            "Input_Logic", step, getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList()),
+                                                                            "Sai thu tu dia chi: phai mo dropdown va chon xong Tinh/Thanh truoc; chi khi Tinh/Thanh da hien gia tri moi duoc nhap Quan/Huyen. Hay tra loi lai chi gom cac buoc xu ly Tinh/Thanh truoc.",
+                                                                            splitTextAnswer[1]
+                                                                    );
+                                                                    tempTextAnswer = textAnswer;
+                                                                    continue stateMachine;
+                                                                }
                                                                 if ((labelLower.contains("quan") || labelLower.contains("huyen") || labelLower.contains("district"))
                                                                         && (valueLower.contains("hanoi") || valueLower.contains("hochiminh") || valueLower.contains("hcm")))
                                                                 {
@@ -2245,6 +2277,17 @@ public class StartAuto extends HSQService
                                                             {
                                                                 String contextStr = match.group(1).trim();
                                                                 updateNotificationContent("Smart Dropdown: " + contextStr);
+
+                                                                if (isDistrictLocationField(contextStr) && isProvinceSelectionPendingInXml())
+                                                                {
+                                                                    handleActionFailure(
+                                                                            "Dropdown_Logic", step, getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList()),
+                                                                            "Sai thu tu dia chi: Tinh/Thanh van chua chon. Phai dropdown + chon Tinh/Thanh xong moi duoc dropdown/nhap Quan/Huyen.",
+                                                                            splitTextAnswer[1]
+                                                                    );
+                                                                    tempTextAnswer = textAnswer;
+                                                                    continue stateMachine;
+                                                                }
 
                                                                 // Gọi hàm siêu cấp
                                                                 List<TextBlock> resultScreen = clickDropDown(contextStr);
@@ -3190,6 +3233,8 @@ public class StartAuto extends HSQService
                         aiModel2 = control.getString("aiModel2");
                         AIProxyEnabled = control.optBoolean("AIProxyEnabled", false);
                         AIProxyUrl = control.optString("AIProxyUrl", "https://quaykute.id.vn");
+                        serveyApp = control.getString("serveyApp");
+
                         break;
                     }
                 }
@@ -4074,6 +4119,7 @@ public class StartAuto extends HSQService
                 || compact.equals("selectone")
                 || compact.equals("co")
                 || compact.equals("khong")
+                || compact.equals("ketiep")
                 || compact.equals("tieptuc")
                 || compact.equals("continue")
                 || compact.equals("back")
@@ -4657,6 +4703,183 @@ public class StartAuto extends HSQService
     {
         inputText("", null, false);
     }
+
+    private boolean tryFocusInputForExactBounds(android.graphics.Rect expectedBounds)
+    {
+        AccessibilityNodeInfo root = null;
+        try
+        {
+            if (ASBLBridgeService.asblService == null || expectedBounds == null) return false;
+            root = ASBLBridgeService.asblService.getRootInActiveWindow();
+            return performFocusInputForExactBounds(root, expectedBounds);
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (root != null) root.recycle();
+            }
+            catch (Exception ignored) {}
+        }
+    }
+
+    private boolean performFocusInputForExactBounds(AccessibilityNodeInfo node, android.graphics.Rect expectedBounds)
+    {
+        if (node == null || expectedBounds == null) return false;
+        try
+        {
+            String clazz = node.getClassName() == null ? "" : node.getClassName().toString().toLowerCase(Locale.ROOT);
+            boolean inputLike = node.isEditable()
+                    || clazz.contains("edittext")
+                    || clazz.contains("autocompletetextview");
+            if (inputLike && node.isEnabled() && node.isVisibleToUser())
+            {
+                android.graphics.Rect actualBounds = new android.graphics.Rect();
+                node.getBoundsInScreen(actualBounds);
+                boolean boundsMatch = Math.abs(actualBounds.left - expectedBounds.left) <= 40
+                        && Math.abs(actualBounds.top - expectedBounds.top) <= 40
+                        && Math.abs(actualBounds.right - expectedBounds.right) <= 40
+                        && Math.abs(actualBounds.bottom - expectedBounds.bottom) <= 40;
+                if (boundsMatch)
+                {
+                    boolean focused = node.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                    boolean clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                    if (focused || clicked) return true;
+                }
+            }
+
+            for (int i = 0; i < node.getChildCount(); i++)
+            {
+                AccessibilityNodeInfo child = null;
+                try
+                {
+                    child = node.getChild(i);
+                    if (child != null && performFocusInputForExactBounds(child, expectedBounds)) return true;
+                }
+                finally
+                {
+                    try
+                    {
+                        if (child != null) child.recycle();
+                    }
+                    catch (Exception ignored) {}
+                }
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return false;
+    }
+
+    private android.graphics.Point findSafeInputTouchPoint(android.graphics.Rect inputRect, String xml)
+    {
+        if (inputRect == null) return null;
+
+        List<android.graphics.Rect> blockers = collectFloatingInputBlockers(inputRect, xml);
+        int[] xs = new int[]{
+                inputRect.centerX(),
+                inputRect.left + inputRect.width() * 3 / 8,
+                inputRect.left + inputRect.width() / 4,
+                inputRect.left + inputRect.width() / 8,
+                inputRect.left + inputRect.width() * 3 / 4
+        };
+        int[] ys = new int[]{
+                inputRect.centerY(),
+                inputRect.top + inputRect.height() / 3,
+                inputRect.top + inputRect.height() / 4,
+                inputRect.top + inputRect.height() * 2 / 3
+        };
+
+        android.graphics.Point best = null;
+        int bestScore = Integer.MAX_VALUE;
+        for (int x : xs)
+        {
+            for (int y : ys)
+            {
+                if (x < inputRect.left + 18 || x > inputRect.right - 18
+                        || y < inputRect.top + 18 || y > inputRect.bottom - 18) continue;
+
+                boolean blocked = false;
+                for (android.graphics.Rect blocker : blockers)
+                {
+                    if (blocker.contains(x, y))
+                    {
+                        blocked = true;
+                        break;
+                    }
+                }
+                if (blocked) continue;
+
+                int score = Math.abs(x - inputRect.centerX()) + Math.abs(y - inputRect.centerY()) * 2;
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = new android.graphics.Point(x, y);
+                }
+            }
+        }
+        return best == null ? new android.graphics.Point(inputRect.centerX(), inputRect.centerY()) : best;
+    }
+
+    private List<android.graphics.Rect> collectFloatingInputBlockers(android.graphics.Rect inputRect, String xml)
+    {
+        List<android.graphics.Rect> blockers = new ArrayList<>();
+        if (inputRect == null || xml == null || xml.trim().isEmpty()) return blockers;
+
+        try
+        {
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String clazz = node.getAttribute("class") == null ? "" : node.getAttribute("class").toLowerCase(Locale.ROOT);
+                if (!clazz.contains("button") || "false".equals(node.getAttribute("enabled"))) continue;
+
+                android.graphics.Rect buttonRect = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (buttonRect == null || buttonRect.top < heightOfScreen * 0.55f) continue;
+                addExpandedInputBlocker(blockers, buttonRect, inputRect, 24);
+
+                org.w3c.dom.Node parent = node.getParentNode();
+                int depth = 0;
+                while (parent instanceof org.w3c.dom.Element && depth < 4)
+                {
+                    org.w3c.dom.Element element = (org.w3c.dom.Element) parent;
+                    android.graphics.Rect r = HSQTools.parseBoundsFromXml(element.getAttribute("bounds"));
+                    if (r != null
+                            && r.right >= widthOfScreen * 0.72f
+                            && r.bottom >= heightOfScreen - 180
+                            && r.width() <= widthOfScreen * 0.58f
+                            && r.height() <= heightOfScreen * 0.48f)
+                    {
+                        addExpandedInputBlocker(blockers, r, inputRect, 18);
+                    }
+                    parent = parent.getParentNode();
+                    depth++;
+                }
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return blockers;
+    }
+
+    private void addExpandedInputBlocker(List<android.graphics.Rect> blockers, android.graphics.Rect raw,
+                                         android.graphics.Rect inputRect, int margin)
+    {
+        if (blockers == null || raw == null || inputRect == null) return;
+        android.graphics.Rect expanded = new android.graphics.Rect(
+                raw.left - margin, raw.top - margin, raw.right + margin, raw.bottom + margin);
+        if (android.graphics.Rect.intersects(expanded, inputRect)) blockers.add(expanded);
+    }
     /**
      * Mắt thần dò ô Input: Tìm ô cho phép nhập liệu nằm gần dòng Text nhất
      */
@@ -5221,6 +5444,18 @@ public class StartAuto extends HSQService
     {
         if (splitStep == null || splitStep.length != 1 || stepIndex != 0) return false;
         if (!isTrailingPageNextButton(step)) return false;
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (isTargetAlreadySelectedInDropdownBeforeNext(mainAnswer, xml))
+            {
+                updateNotificationContent("Bo repair lonely-next: dap an da nam trong dropdown");
+                return false;
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
         return isLikelyChoiceMainAnswer(mainAnswer);
     }
 
@@ -5341,7 +5576,7 @@ public class StartAuto extends HSQService
         String clean = cleanClickToTextMatchText(raw);
         if (clean.isEmpty()) return false;
 
-        if (clean.matches("^(tiep|tieptuc|tieptheo|next|continue|submit|done|xong|ok|okay|batdau|start|swipemore|captcha|modanhsach|localbrain)$"))
+        if (clean.matches("^(tiep|ketiep|tieptuc|tieptheo|next|continue|submit|done|xong|ok|okay|batdau|start|swipemore|captcha|modanhsach|localbrain)$"))
         {
             return false;
         }
@@ -5352,11 +5587,196 @@ public class StartAuto extends HSQService
         return clean.length() >= 4;
     }
 
+    private boolean isTargetAlreadySelectedInDropdownBeforeNext(String targetText, String xml)
+    {
+        if (targetText == null || xml == null || xml.trim().isEmpty()) return false;
+
+        String targetNorm = cleanClickToTextMatchText(targetText);
+        if (targetNorm.isEmpty()) return false;
+
+        try
+        {
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+            if (!hasVisiblePageNextButtonInXml(nodes)) return false;
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String rawText = ((node.getAttribute("text") == null ? "" : node.getAttribute("text")) + " " +
+                        (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).trim();
+                if (!isExactClickToTextText(rawText, targetNorm)) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+                if (!isXmlRectUsablyVisible(visibleRect)) continue;
+
+                if (isDropdownSelectedTargetNode(nodes, node, visibleRect))
+                {
+                    return true;
+                }
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return false;
+    }
+
+    private boolean hasVisiblePageNextButtonInXml(org.w3c.dom.NodeList nodes)
+    {
+        if (nodes == null) return false;
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+            if ("false".equals(node.getAttribute("enabled"))) continue;
+            String rawText = ((node.getAttribute("text") == null ? "" : node.getAttribute("text")) + " " +
+                    (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).trim();
+            String clean = cleanClickToTextMatchText(rawText);
+            boolean forwardNavId = isForwardNavigationResourceId(node.getAttribute("resource-id"));
+            if (!forwardNavId && !clean.matches("^(ketiep|tieptuc|tieptheo|tiepthe|next|continue|submit|done|gui|send)$")) continue;
+
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+            if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+            android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+            if (!isXmlRectUsablyVisible(visibleRect)) continue;
+            if (visibleRect.centerY() < heightOfScreen * 0.32f) continue;
+
+            String className = node.getAttribute("class") == null ? "" : node.getAttribute("class").toLowerCase(Locale.ROOT);
+            boolean interactive = "true".equals(node.getAttribute("clickable"))
+                    || "true".equals(node.getAttribute("focusable"))
+                    || className.contains("button");
+            if ((forwardNavId && interactive) || (!forwardNavId && (interactive || visibleRect.width() > 80))) return true;
+        }
+        return false;
+    }
+
+    private boolean isDropdownSelectedTargetNode(org.w3c.dom.NodeList nodes, org.w3c.dom.Element targetNode, android.graphics.Rect targetRect)
+    {
+        if (targetNode == null || targetRect == null) return false;
+        if (isChoiceControlNode(targetNode)) return false;
+        if (isDropdownClassOrId(targetNode))
+        {
+            return true;
+        }
+
+        org.w3c.dom.Node current = targetNode;
+        while (current instanceof org.w3c.dom.Element)
+        {
+            org.w3c.dom.Element element = (org.w3c.dom.Element) current;
+            if (isChoiceControlNode(element)) return false;
+
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(element.getAttribute("bounds"));
+            if (r != null && r.width() > 0 && r.height() > 0)
+            {
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(element, r);
+                if (isXmlRectUsablyVisible(visibleRect)
+                        && visibleRect.contains(targetRect.centerX(), targetRect.centerY())
+                        && isDropdownLikeContainer(nodes, element, visibleRect, targetRect))
+                {
+                    return true;
+                }
+            }
+            current = current.getParentNode();
+        }
+        return false;
+    }
+
+    private boolean isDropdownLikeContainer(org.w3c.dom.NodeList nodes, org.w3c.dom.Element element, android.graphics.Rect containerRect, android.graphics.Rect targetRect)
+    {
+        if (element == null || containerRect == null || targetRect == null) return false;
+        if (isChoiceControlNode(element)) return false;
+
+        String className = element.getAttribute("class") == null ? "" : element.getAttribute("class").toLowerCase(Locale.ROOT);
+        boolean interactive = "true".equals(element.getAttribute("clickable"))
+                || "true".equals(element.getAttribute("focusable"))
+                || className.contains("spinner")
+                || className.contains("edittext")
+                || className.contains("autocomplete")
+                || className.contains("button");
+        if (!interactive) return false;
+
+        if (isDropdownClassOrId(element)) return true;
+        if (containerRect.height() < 36 || containerRect.height() > 130) return false;
+        if (containerRect.width() < Math.max(180, targetRect.width() + 120)) return false;
+        if (Math.abs(containerRect.centerY() - targetRect.centerY()) > Math.max(42, containerRect.height() / 2)) return false;
+
+        int leftPadding = targetRect.left - containerRect.left;
+        boolean textNearLeft = leftPadding >= -8 && leftPadding <= Math.max(120, containerRect.width() / 5);
+        if (!textNearLeft) return false;
+
+        return hasDropdownCueInRow(nodes, containerRect) || containerRect.width() > widthOfScreen * 0.28f;
+    }
+
+    private boolean isChoiceControlNode(org.w3c.dom.Element node)
+    {
+        if (node == null) return false;
+        String className = node.getAttribute("class") == null ? "" : node.getAttribute("class").toLowerCase(Locale.ROOT);
+        return "true".equals(node.getAttribute("checkable"))
+                || className.contains("radio")
+                || className.contains("checkbox")
+                || className.contains("compoundbutton")
+                || className.contains("togglebutton");
+    }
+
+    private boolean isDropdownClassOrId(org.w3c.dom.Element node)
+    {
+        if (node == null) return false;
+        String haystack = ((node.getAttribute("class") == null ? "" : node.getAttribute("class")) + " " +
+                (node.getAttribute("resource-id") == null ? "" : node.getAttribute("resource-id")) + " " +
+                (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).toLowerCase(Locale.ROOT);
+        return haystack.contains("spinner")
+                || haystack.contains("combobox")
+                || haystack.contains("combo")
+                || haystack.contains("dropdown")
+                || haystack.contains("drop_down")
+                || haystack.contains("select")
+                || haystack.contains("autocomplete");
+    }
+
+    private boolean hasDropdownCueInRow(org.w3c.dom.NodeList nodes, android.graphics.Rect containerRect)
+    {
+        if (nodes == null || containerRect == null) return false;
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+            if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+            android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+            if (!isXmlRectUsablyVisible(visibleRect)) continue;
+            if (Math.abs(visibleRect.centerY() - containerRect.centerY()) > Math.max(32, containerRect.height() / 2)) continue;
+            if (visibleRect.centerX() < containerRect.left + containerRect.width() * 0.65f) continue;
+            if (visibleRect.centerX() > containerRect.right + 24) continue;
+
+            String raw = ((node.getAttribute("text") == null ? "" : node.getAttribute("text")) + " " +
+                    (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc")) + " " +
+                    (node.getAttribute("resource-id") == null ? "" : node.getAttribute("resource-id")) + " " +
+                    (node.getAttribute("class") == null ? "" : node.getAttribute("class"))).toLowerCase(Locale.ROOT);
+            if (raw.contains("dropdown") || raw.contains("drop_down") || raw.contains("expand") || raw.contains("spinner") || raw.contains("select"))
+            {
+                return true;
+            }
+            if (raw.contains("▼") || raw.contains("▾") || raw.contains("⌄") || raw.contains("∨"))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean tryClickMainAnswerBeforeLonelyNext(String mainAnswer)
     {
         try
         {
             String xml = HSQTools.getFlexibleXML();
+            if (isTargetAlreadySelectedInDropdownBeforeNext(mainAnswer, xml))
+            {
+                updateNotificationContent("Auto repair: dap an da co trong dropdown, khong bam lai");
+                return false;
+            }
+
             android.graphics.Point point = findShortYesNoClickToTextChoicePoint(mainAnswer, xml);
             if (point == null)
             {
@@ -5401,7 +5821,8 @@ public class StartAuto extends HSQService
 
                 android.graphics.Rect textRect = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
                 if (textRect == null || textRect.width() <= 0 || textRect.height() <= 0) continue;
-                if (textRect.centerY() <= 180 || textRect.centerY() >= heightOfScreen - 50 || textRect.centerY() <= clickToTextMinY) continue;
+                textRect = getXmlClippedVisibleRect(node, textRect);
+                if (!isXmlRectUsablyVisible(textRect) || textRect.centerY() <= clickToTextMinY) continue;
 
                 android.graphics.Rect clickRect = findClickableChoiceRectForAnswer(nodes, textRect);
                 if (clickRect == null) continue;
@@ -5422,7 +5843,9 @@ public class StartAuto extends HSQService
 
             if (bestClickRect == null || bestTextRect == null) return null;
 
-            int clickX = bestClickRect.centerX();
+            int clickX = bestClickRect.width() > widthOfScreen * 0.35f && bestClickRect.height() >= 45 && bestClickRect.height() <= 360
+                    ? getPreferredChoiceControlX(bestClickRect)
+                    : bestClickRect.centerX();
             int clickY = bestTextRect.centerY();
             if (clickY < bestClickRect.top + 12 || clickY > bestClickRect.bottom - 12)
             {
@@ -5461,7 +5884,8 @@ public class StartAuto extends HSQService
 
             android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
             if (r == null || r.width() <= 0 || r.height() <= 0) continue;
-            if (r.centerY() <= 180 || r.centerY() >= heightOfScreen - 50 || r.centerY() <= clickToTextMinY) continue;
+            r = getXmlClippedVisibleRect(node, r);
+            if (!isXmlRectUsablyVisible(r) || r.centerY() <= clickToTextMinY) continue;
             if (r.height() < 24 || r.height() > 520) continue;
             if (r.width() < 40 || r.width() > widthOfScreen * 0.96f) continue;
 
@@ -5757,6 +6181,15 @@ public class StartAuto extends HSQService
             }
 
             if (!validRadios.isEmpty()) {
+                for (org.w3c.dom.Element node : validRadios)
+                {
+                    android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                    if (isWideChoiceControlRect(node, r) && r.left <= finalClickX && r.right >= finalClickX)
+                    {
+                        return getPreferredChoiceControlX(r);
+                    }
+                }
+
                 // Loại bỏ trùng lặp: Android thường xếp chồng nhiều View (Checkbox, ImageView, FrameLayout) lên cùng 1 tọa độ
                 List<Integer> uniqueCenters = new ArrayList<>();
                 for (org.w3c.dom.Element node : validRadios) {
@@ -5775,6 +6208,14 @@ public class StartAuto extends HSQService
                 }
 
                 if (uniqueCenters.size() == 1) {
+                    for (org.w3c.dom.Element node : validRadios)
+                    {
+                        android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                        if (isWideChoiceControlRect(node, r))
+                        {
+                            return getPreferredChoiceControlX(r);
+                        }
+                    }
                     // 🌟 ĐỘC CÔ CẦU BẠI: Thực chất cả hàng ngang chỉ có đúng 1 lỗ duy nhất (dù bị xếp chồng nhiều node XML)
                     // Cứu cánh cho form dị: Chữ tuốt lề trái, lỗ Checkbox tuốt lề phải (distanceX > 1000px)
                     return uniqueCenters.get(0);
@@ -5784,6 +6225,11 @@ public class StartAuto extends HSQService
                 int minDistanceX = Integer.MAX_VALUE;
                 for (org.w3c.dom.Element node : validRadios) {
                     android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                    if (isWideChoiceControlRect(node, r) && r.left <= finalClickX && r.right >= finalClickX)
+                    {
+                        return getPreferredChoiceControlX(r);
+                    }
+
                     int distanceX = Math.abs(r.centerX() - finalClickX);
                     
                     String className = node.getAttribute("class").toLowerCase();
@@ -5810,10 +6256,57 @@ public class StartAuto extends HSQService
         return finalClickX; // Không tìm thấy hoặc lỗi thì giữ nguyên X cũ
     }
 
+    private boolean isWideChoiceControlRect(org.w3c.dom.Element node, android.graphics.Rect r)
+    {
+        if (node == null || r == null) return false;
+        String className = node.getAttribute("class") == null ? "" : node.getAttribute("class").toLowerCase(Locale.ROOT);
+        boolean explicitChoice = className.contains("radio") || className.contains("checkbox") || "true".equals(node.getAttribute("checkable"));
+        return explicitChoice
+                && r.width() > widthOfScreen * 0.35f
+                && r.height() >= 45
+                && r.height() <= 360;
+    }
+
+    private int getPreferredChoiceControlX(android.graphics.Rect r)
+    {
+        if (r == null) return xCenter;
+        int offset = Math.max(48, Math.min(96, r.height() / 2));
+        return Math.max(r.left + 12, Math.min(r.right - 12, r.left + offset));
+    }
+
     private int clickToTextMinY = 0;
 
     private List<TextBlock> clickToText(String textWantToClick)
     {
+        return clickToText(textWantToClick, false);
+    }
+
+    private List<TextBlock> clickToText(String textWantToClick, boolean forceOpenDropdownOptionSelection)
+    {
+        return clickToText(textWantToClick, forceOpenDropdownOptionSelection, null);
+    }
+
+    private List<TextBlock> clickToText(String textWantToClick, boolean forceOpenDropdownOptionSelection,
+                                       android.graphics.Rect excludedDropdownControlRect)
+    {
+        if (tryHandleStackedDobDropdownTarget(textWantToClick, true))
+        {
+            return null;
+        }
+
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (!forceOpenDropdownOptionSelection && isTargetAlreadySelectedInDropdownBeforeNext(textWantToClick, xml))
+            {
+                updateNotificationContent("ClickText: dap an da co san trong dropdown, bo bam lai");
+                return null;
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+
         while (true)
         {
             List<TextBlock> temp = new ArrayList<>();
@@ -5826,6 +6319,12 @@ public class StartAuto extends HSQService
                 // Lấy toàn bộ TextBlock trên màn hình (Đã lọc theo clickToTextMinY để khỏi chọt trùng)
                 List<TextBlock> checkAnswer = getCheckAnswerSmart().stream()
                         .filter(x -> x.y > 180 && x.y < 2900 && x.y > clickToTextMinY).collect(Collectors.toList());
+                if (excludedDropdownControlRect != null)
+                {
+                    checkAnswer = checkAnswer.stream()
+                            .filter(x -> !isClickToTextExcludedControlPoint(x, excludedDropdownControlRect))
+                            .collect(Collectors.toList());
+                }
                 phoneScreen.addAll(checkAnswer);
                 phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
                 while (true)
@@ -5873,11 +6372,22 @@ public class StartAuto extends HSQService
                         break timTextLoop;
                     }
 
-                    HSQTools.TextBlock target = findStrictClickToTextTarget(textWantToClick, checkAnswer, currentXmlForCheck);
+                    HSQTools.TextBlock target = findStrictClickToTextTarget(
+                            textWantToClick, checkAnswer, currentXmlForCheck, excludedDropdownControlRect);
+                    if (target == null)
+                    {
+                        target = findUniqueInteractiveClickToTextTypoInXml(textWantToClick, currentXmlForCheck);
+                        if (isClickToTextExcludedControlPoint(target, excludedDropdownControlRect)) target = null;
+                        if (target != null)
+                        {
+                            updateNotificationContent("Click Text XML typo: [" + textWantToClick + "] -> [" + target.text + "]");
+                        }
+                    }
                     if (target == null)
                     {
                         HSQTools.TextBlock fuzzyTarget = HSQTools.findBestTextBlockMatch(textWantToClick, checkAnswer, currentXmlForCheck);
-                        if (isTrustworthyClickToTextFuzzyMatch(textWantToClick, fuzzyTarget))
+                        if (!isClickToTextExcludedControlPoint(fuzzyTarget, excludedDropdownControlRect)
+                                && isTrustworthyClickToTextFuzzyMatch(textWantToClick, fuzzyTarget))
                         {
                             target = fuzzyTarget;
                         }
@@ -5976,6 +6486,12 @@ public class StartAuto extends HSQService
                     if (checkLaiScreen == 0)
                     {
                         checkAnswer = HSQTools.getOcrTextBlocks().stream().filter(x -> x.y > 180 && x.y < 2750).collect(Collectors.toList());
+                        if (excludedDropdownControlRect != null)
+                        {
+                            checkAnswer = checkAnswer.stream()
+                                    .filter(x -> !isClickToTextExcludedControlPoint(x, excludedDropdownControlRect))
+                                    .collect(Collectors.toList());
+                        }
                         checkLaiScreen++;
                         continue;
                     }
@@ -6041,11 +6557,34 @@ public class StartAuto extends HSQService
                 android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
                 if (r == null) continue;
 
-                if (r.centerY() > 180 && r.centerY() < heightOfScreen - 80 && r.height() > 8)
+                android.graphics.Rect clipRect = getXmlAncestorClipRect(node);
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+
+                if (isXmlRectUsablyVisible(visibleRect))
                 {
                     return 0;
                 }
-                if (r.top >= heightOfScreen - 100 || r.centerY() >= heightOfScreen - 90 || r.height() <= 2 && r.top >= heightOfScreen - 120)
+
+                if (clipRect != null && clipRect.width() > 0 && clipRect.height() > 0)
+                {
+                    if (r.bottom <= clipRect.top + 8 || r.centerY() <= clipRect.top + 8)
+                    {
+                        foundAbove = true;
+                    }
+                    else if (r.top >= clipRect.bottom - 8 || r.centerY() >= clipRect.bottom - 8)
+                    {
+                        foundBelow = true;
+                    }
+                    else if (r.centerY() < clipRect.centerY())
+                    {
+                        foundAbove = true;
+                    }
+                    else
+                    {
+                        foundBelow = true;
+                    }
+                }
+                else if (r.top >= heightOfScreen - 100 || r.centerY() >= heightOfScreen - 90 || (r.height() <= 2 && r.top >= heightOfScreen - 120))
                 {
                     foundBelow = true;
                 }
@@ -6062,6 +6601,54 @@ public class StartAuto extends HSQService
         {
         }
         return 0;
+    }
+
+    private android.graphics.Rect getXmlAncestorClipRect(org.w3c.dom.Element node)
+    {
+        int screenRight = Math.max(1, widthOfScreen);
+        int screenBottom = Math.max(1, heightOfScreen - 50);
+        android.graphics.Rect clip = new android.graphics.Rect(0, 181, screenRight, screenBottom);
+        if (node == null) return clip;
+
+        org.w3c.dom.Node parent = node.getParentNode();
+        while (parent instanceof org.w3c.dom.Element)
+        {
+            org.w3c.dom.Element parentElement = (org.w3c.dom.Element) parent;
+            android.graphics.Rect parentRect = HSQTools.parseBoundsFromXml(parentElement.getAttribute("bounds"));
+            if (parentRect != null && parentRect.width() > 0 && parentRect.height() > 0)
+            {
+                clip = intersectXmlRects(clip, parentRect);
+                if (clip.width() <= 0 || clip.height() <= 0) return clip;
+            }
+            parent = parent.getParentNode();
+        }
+        return clip;
+    }
+
+    private android.graphics.Rect getXmlClippedVisibleRect(org.w3c.dom.Element node, android.graphics.Rect rect)
+    {
+        if (rect == null) return null;
+        android.graphics.Rect clip = getXmlAncestorClipRect(node);
+        return intersectXmlRects(rect, clip);
+    }
+
+    private android.graphics.Rect intersectXmlRects(android.graphics.Rect a, android.graphics.Rect b)
+    {
+        if (a == null || b == null) return new android.graphics.Rect(0, 0, 0, 0);
+        int left = Math.max(a.left, b.left);
+        int top = Math.max(a.top, b.top);
+        int right = Math.min(a.right, b.right);
+        int bottom = Math.min(a.bottom, b.bottom);
+        return new android.graphics.Rect(left, top, right, bottom);
+    }
+
+    private boolean isXmlRectUsablyVisible(android.graphics.Rect rect)
+    {
+        return rect != null
+                && rect.width() >= 8
+                && rect.height() >= 8
+                && rect.centerY() > 180
+                && rect.centerY() < heightOfScreen - 50;
     }
 
     private int getNumericClickToTextScrollDirection(String textWantToClick, List<TextBlock> visibleBlocks)
@@ -6192,21 +6779,49 @@ public class StartAuto extends HSQService
         return result;
     }
 
-    private HSQTools.TextBlock findStrictClickToTextTarget(String textWantToClick, List<TextBlock> checkAnswer, String currentXmlForCheck)
+    private boolean isClickToTextExcludedControlPoint(HSQTools.TextBlock block, android.graphics.Rect excludedRect)
+    {
+        if (block == null || excludedRect == null) return false;
+        return block.x >= excludedRect.left - 24
+                && block.x <= excludedRect.right + 24
+                && block.y >= excludedRect.top - 24
+                && block.y <= excludedRect.bottom + 24;
+    }
+
+    private boolean isClickToTextExcludedControlRect(android.graphics.Rect candidate, android.graphics.Rect excludedRect)
+    {
+        if (candidate == null || excludedRect == null) return false;
+        if (excludedRect.contains(candidate.centerX(), candidate.centerY())) return true;
+
+        int overlapWidth = Math.max(0, Math.min(candidate.right, excludedRect.right) - Math.max(candidate.left, excludedRect.left));
+        int overlapHeight = Math.max(0, Math.min(candidate.bottom, excludedRect.bottom) - Math.max(candidate.top, excludedRect.top));
+        int overlapArea = overlapWidth * overlapHeight;
+        int candidateArea = Math.max(1, candidate.width() * candidate.height());
+        return overlapArea >= candidateArea * 0.55f;
+    }
+
+    private HSQTools.TextBlock findStrictClickToTextTarget(String textWantToClick, List<TextBlock> checkAnswer,
+                                                           String currentXmlForCheck,
+                                                           android.graphics.Rect excludedDropdownControlRect)
     {
         String targetNorm = cleanClickToTextMatchText(textWantToClick);
         if (targetNorm.isEmpty()) return null;
 
-        HSQTools.TextBlock fromScreen = findExactClickToTextInBlocks(textWantToClick, checkAnswer);
+        HSQTools.TextBlock fromScreen = findExactClickToTextInBlocks(
+                textWantToClick, checkAnswer, excludedDropdownControlRect);
         if (fromScreen != null) return fromScreen;
 
-        HSQTools.TextBlock fromXml = findExactClickToTextInXml(textWantToClick, currentXmlForCheck);
+        HSQTools.TextBlock fromXml = findExactClickToTextInXml(
+                textWantToClick, currentXmlForCheck, excludedDropdownControlRect);
         if (fromXml != null) return fromXml;
 
-        return findExactClickToTextInBlocks(textWantToClick, HSQTools.getOcrTextBlocks());
+        return findExactClickToTextInBlocks(
+                textWantToClick, HSQTools.getOcrTextBlocks(), excludedDropdownControlRect);
     }
 
-    private HSQTools.TextBlock findExactClickToTextInBlocks(String textWantToClick, List<? extends HSQTools.TextBlock> blocks)
+    private HSQTools.TextBlock findExactClickToTextInBlocks(String textWantToClick,
+                                                            List<? extends HSQTools.TextBlock> blocks,
+                                                            android.graphics.Rect excludedDropdownControlRect)
     {
         if (blocks == null || blocks.isEmpty()) return null;
         String targetNorm = cleanClickToTextMatchText(textWantToClick);
@@ -6217,6 +6832,7 @@ public class StartAuto extends HSQService
         {
             if (block == null || block.text == null) continue;
             if (block.y <= 180 || block.y >= heightOfScreen - 50 || block.y <= clickToTextMinY) continue;
+            if (isClickToTextExcludedControlPoint(block, excludedDropdownControlRect)) continue;
             if (!isExactClickToTextText(block.text, targetNorm)) continue;
 
             if (best == null || block.y > best.y)
@@ -6227,7 +6843,8 @@ public class StartAuto extends HSQService
         return best;
     }
 
-    private HSQTools.TextBlock findExactClickToTextInXml(String textWantToClick, String xml)
+    private HSQTools.TextBlock findExactClickToTextInXml(String textWantToClick, String xml,
+                                                         android.graphics.Rect excludedDropdownControlRect)
     {
         if (xml == null || xml.trim().isEmpty()) return null;
         String targetNorm = cleanClickToTextMatchText(textWantToClick);
@@ -6249,15 +6866,107 @@ public class StartAuto extends HSQService
 
                 android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
                 if (r == null || r.width() <= 0 || r.height() <= 0) continue;
-                if (r.centerY() <= 180 || r.centerY() >= heightOfScreen - 50 || r.centerY() <= clickToTextMinY) continue;
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+                if (!isXmlRectUsablyVisible(visibleRect) || visibleRect.centerY() <= clickToTextMinY) continue;
+                if (isClickToTextExcludedControlRect(visibleRect, excludedDropdownControlRect)) continue;
 
-                HSQTools.TextBlock candidate = new HSQTools.TextBlock(rawText, r.centerX(), r.centerY());
+                HSQTools.TextBlock candidate = new HSQTools.TextBlock(rawText, visibleRect.centerX(), visibleRect.centerY());
                 if (best == null || candidate.y > best.y)
                 {
                     best = candidate;
                 }
             }
             return best;
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
+    private HSQTools.TextBlock findUniqueInteractiveClickToTextTypoInXml(String textWantToClick, String xml)
+    {
+        if (xml == null || xml.trim().isEmpty()) return null;
+
+        String targetNorm = cleanClickToTextMatchText(textWantToClick);
+        String targetCompact = targetNorm.replace("-", "");
+        if (targetCompact.length() < 6 || targetCompact.matches("\\d+")) return null;
+
+        try
+        {
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            HSQTools.TextBlock best = null;
+            String bestNorm = "";
+            int bestDistance = Integer.MAX_VALUE;
+            int bestControlScore = Integer.MIN_VALUE;
+            long bestArea = Long.MAX_VALUE;
+            boolean ambiguous = false;
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                if ("false".equals(node.getAttribute("enabled"))) continue;
+
+                String clazz = node.getAttribute("class") == null ? "" : node.getAttribute("class").toLowerCase(Locale.ROOT);
+                boolean clickable = "true".equals(node.getAttribute("clickable"));
+                boolean checkable = "true".equals(node.getAttribute("checkable"));
+                boolean directChoiceControl = clickable
+                        || checkable
+                        || clazz.contains("checkedtextview")
+                        || clazz.contains("radiobutton")
+                        || clazz.contains("checkbox")
+                        || clazz.contains("button");
+                if (!directChoiceControl) continue;
+
+                String rawText = ((node.getAttribute("text") == null ? "" : node.getAttribute("text")) + " " +
+                        (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).trim();
+                String nodeCompact = cleanClickToTextMatchText(rawText).replace("-", "");
+                if (nodeCompact.length() < 6 || nodeCompact.equals(targetCompact)) continue;
+                if (Math.abs(nodeCompact.length() - targetCompact.length()) > 1) continue;
+
+                int distance = HSQTools.levenshtein(nodeCompact, targetCompact);
+                if (distance != 1) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+                if (!isXmlRectUsablyVisible(visibleRect) || visibleRect.centerY() <= clickToTextMinY) continue;
+
+                int controlScore = 0;
+                if (clickable) controlScore += 300;
+                if (checkable) controlScore += 400;
+                if (clazz.contains("checkedtextview") || clazz.contains("radiobutton") || clazz.contains("checkbox")) controlScore += 500;
+                if (clazz.contains("button")) controlScore += 200;
+                long area = (long) visibleRect.width() * visibleRect.height();
+
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestNorm = nodeCompact;
+                    bestControlScore = controlScore;
+                    bestArea = area;
+                    best = new HSQTools.TextBlock(rawText, visibleRect.centerX(), visibleRect.centerY());
+                    ambiguous = false;
+                }
+                else if (distance == bestDistance)
+                {
+                    if (!nodeCompact.equals(bestNorm))
+                    {
+                        ambiguous = true;
+                    }
+                    else if (controlScore > bestControlScore || (controlScore == bestControlScore && area < bestArea))
+                    {
+                        bestControlScore = controlScore;
+                        bestArea = area;
+                        best = new HSQTools.TextBlock(rawText, visibleRect.centerX(), visibleRect.centerY());
+                    }
+                }
+            }
+
+            return ambiguous ? null : best;
         }
         catch (Exception ignored)
         {
@@ -6295,6 +7004,9 @@ public class StartAuto extends HSQService
 
     private boolean isExactClickToTextText(String rawText, String targetNorm)
     {
+        if (isDelimitedClickToTextChoiceLabelMatch(rawText, targetNorm)) return true;
+        if (isParentheticalClickToTextChoiceLabelMatch(rawText, targetNorm)) return true;
+
         String nodeNorm = cleanClickToTextMatchText(rawText);
         if (nodeNorm.isEmpty() || targetNorm == null || targetNorm.isEmpty()) return false;
         if (nodeNorm.equals(targetNorm) || HSQTools.equalsOcrFriendly(nodeNorm, targetNorm)) return true;
@@ -6306,6 +7018,84 @@ public class StartAuto extends HSQService
         return nodeCompact.equals(targetCompact)
                 || HSQTools.equalsOcrFriendly(nodeCompact, targetCompact)
                 || isClickToTextPrefixDetailMatch(nodeCompact, targetCompact);
+    }
+
+    private boolean isDelimitedClickToTextChoiceLabelMatch(String rawText, String targetNorm)
+    {
+        if (rawText == null || targetNorm == null || targetNorm.isEmpty()) return false;
+
+        String detailDelimiterRegex = "[-\\u2010-\\u2015\\u2212:]";
+        String targetCompact = targetNorm.replaceAll(detailDelimiterRegex, "");
+        if (targetCompact.length() < 6 || isDangerousClickToTextPrefixTarget(targetCompact)) return false;
+
+        Matcher delimiter = Pattern.compile(detailDelimiterRegex).matcher(rawText);
+        while (delimiter.find())
+        {
+            String label = rawText.substring(0, delimiter.start()).trim();
+            if (label.isEmpty()) continue;
+
+            if (isClickToTextChoiceLabelPrefixMatch(label, targetCompact)) return true;
+        }
+        return false;
+    }
+
+    private boolean isParentheticalClickToTextChoiceLabelMatch(String rawText, String targetNorm)
+    {
+        if (rawText == null || targetNorm == null || targetNorm.isEmpty()) return false;
+
+        String targetCompact = targetNorm.replace("-", "");
+        if (targetCompact.length() < 6 || isDangerousClickToTextPrefixTarget(targetCompact)) return false;
+
+        Matcher opening = Pattern.compile("[\\(\\[\\uFF08]").matcher(rawText);
+        while (opening.find())
+        {
+            String rawSuffix = rawText.substring(opening.end()).trim().toLowerCase(Locale.ROOT);
+            String suffix = cleanClickToTextMatchText(rawSuffix);
+            int nhuColon = rawSuffix.indexOf(':');
+            if (nhuColon < 0) nhuColon = rawSuffix.indexOf('：');
+            boolean nhuExample = (rawSuffix.startsWith("như") || rawSuffix.startsWith("nhu"))
+                    && nhuColon >= 0 && nhuColon <= 8;
+            boolean exampleDetail = suffix.startsWith("vidu")
+                    || suffix.startsWith("vd")
+                    || suffix.startsWith("example")
+                    || suffix.startsWith("examples")
+                    || suffix.startsWith("eg")
+                    || suffix.startsWith("forexample")
+                    || suffix.startsWith("suchas")
+                    || suffix.startsWith("including")
+                    || suffix.startsWith("include")
+                    || suffix.startsWith("includes")
+                    || suffix.startsWith("baogom")
+                    || suffix.startsWith("changhan")
+                    || nhuExample;
+            if (!exampleDetail) continue;
+
+            String label = rawText.substring(0, opening.start()).trim();
+            if (!label.isEmpty() && isClickToTextChoiceLabelPrefixMatch(label, targetCompact)) return true;
+        }
+        return false;
+    }
+
+    private boolean isClickToTextChoiceLabelPrefixMatch(String rawLabel, String targetCompact)
+    {
+        if (rawLabel == null || targetCompact == null || targetCompact.isEmpty()) return false;
+
+        String labelCompact = cleanClickToTextMatchText(rawLabel).replace("-", "");
+        if (labelCompact.equals(targetCompact)
+                || HSQTools.equalsOcrFriendly(labelCompact, targetCompact))
+        {
+            return true;
+        }
+
+        // OCR thinh thoang doc vong radio o dau dong thanh O/0.
+        if (labelCompact.length() == targetCompact.length() + 1
+                && (labelCompact.charAt(0) == 'o' || labelCompact.charAt(0) == '0'))
+        {
+            String withoutRadioGlyph = labelCompact.substring(1);
+            return withoutRadioGlyph.equals(targetCompact)
+                    || HSQTools.equalsOcrFriendly(withoutRadioGlyph, targetCompact);
+        }
+        return false;
     }
 
     private boolean isClickToTextPrefixDetailMatch(String nodeCompact, String targetCompact)
@@ -6928,10 +7718,7 @@ public class StartAuto extends HSQService
 
                 if (r == null || "false".equals(enabled)) continue;
 
-                boolean navId = resLower.contains("btn_continue")
-                        || resLower.contains("continue")
-                        || resLower.contains("next")
-                        || resLower.contains("submit")
+                boolean navId = isForwardNavigationResourceId(resId)
                         || resLower.contains("nav");
                 boolean nextText = isNextNavigationText(rawFullText, cleanFullText);
                 boolean buttonish = clazzLower.contains("button")
@@ -7190,6 +7977,530 @@ public class StartAuto extends HSQService
         }
     }
 
+    private static final class StackedDobState
+    {
+        final HSQTools.TextBlock monthBlock;
+        final HSQTools.TextBlock dayBlock;
+        final HSQTools.TextBlock yearBlock;
+        final int month;
+        final int day;
+        final int year;
+
+        StackedDobState(HSQTools.TextBlock monthBlock, HSQTools.TextBlock dayBlock, HSQTools.TextBlock yearBlock,
+                        int month, int day, int year)
+        {
+            this.monthBlock = monthBlock;
+            this.dayBlock = dayBlock;
+            this.yearBlock = yearBlock;
+            this.month = month;
+            this.day = day;
+            this.year = year;
+        }
+
+        HSQTools.TextBlock blockForPart(int part)
+        {
+            if (part == 0) return monthBlock;
+            if (part == 1) return dayBlock;
+            return part == 2 ? yearBlock : null;
+        }
+
+        int valueForPart(int part)
+        {
+            if (part == 0) return month;
+            if (part == 1) return day;
+            return part == 2 ? year : -1;
+        }
+    }
+
+    private boolean tryHandleStackedDobDropdownTarget(String rawTarget, boolean allowAdvanceWhenComplete)
+    {
+        try
+        {
+            List<TextBlock> visible = getCheckAnswerSmart().stream()
+                    .filter(x -> x != null && x.y > 180)
+                    .collect(Collectors.toList());
+            if (isDobDropdownListExpanded(visible) || isDobDropdownListExpandedInXml()) return false;
+
+            StackedDobState state = findStackedDobState(visible);
+            if (state == null) return false;
+
+            int explicitPart = classifyExplicitDobDropdownPart(rawTarget);
+            RegistrationInfo profile = activeInfoProfile;
+            int mismatchPart = findFirstMismatchedDobPart(state, profile);
+            int desiredValuePart = inferDobPartFromDesiredValue(rawTarget, profile);
+            boolean repeatsSelectedValue = isCurrentStackedDobValue(rawTarget, state);
+
+            int partToOpen = -1;
+            if (explicitPart >= 0)
+            {
+                partToOpen = explicitPart;
+            }
+            else if (desiredValuePart >= 0)
+            {
+                int expected = getExpectedDobPartValue(profile, desiredValuePart);
+                if (expected > 0 && state.valueForPart(desiredValuePart) != expected)
+                {
+                    partToOpen = desiredValuePart;
+                }
+                else if (mismatchPart >= 0)
+                {
+                    partToOpen = mismatchPart;
+                }
+            }
+            else if (repeatsSelectedValue && mismatchPart >= 0)
+            {
+                partToOpen = mismatchPart;
+            }
+
+            if (partToOpen >= 0)
+            {
+                return openStackedDobDropdownPart(state, partToOpen);
+            }
+
+            if (allowAdvanceWhenComplete && repeatsSelectedValue && mismatchPart < 0)
+            {
+                updateNotificationContent("DOB doc da du, bo click lai gia tri va thu bam Tiep tuc");
+                tryClickVisibleNextButtonFromSmartList("step1 clickbutton {next_page}", visible, 0);
+                return true;
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return false;
+    }
+
+    private StackedDobState findStackedDobState(List<? extends HSQTools.TextBlock> visible)
+    {
+        StackedDobState xmlState = findStackedDobStateFromXml();
+        if (xmlState != null) return xmlState;
+
+        HSQTools.TextBlock question = findDobQuestionBlock(visible);
+        if (question == null) return null;
+
+        int cookieTop = findLikelyCookieOverlayTopFromBlocks(visible);
+        int bottomLimit = cookieTop > 0 ? cookieTop - 20 : Math.min(heightOfScreen - 100, question.y + 1050);
+
+        HSQTools.TextBlock yearBlock = null;
+        int year = -1;
+        for (HSQTools.TextBlock block : visible)
+        {
+            if (block == null || block.text == null || block.y <= question.y + 60 || block.y >= bottomLimit) continue;
+            String raw = block.text.trim();
+            if (!raw.matches("^(19|20)\\d{2}$")) continue;
+            int value;
+            try { value = Integer.parseInt(raw); } catch (Exception ignored) { continue; }
+            if (yearBlock == null || block.y < yearBlock.y)
+            {
+                yearBlock = block;
+                year = value;
+            }
+        }
+        if (yearBlock == null) return null;
+
+        HSQTools.TextBlock monthBlock = null;
+        int month = -1;
+        for (HSQTools.TextBlock block : visible)
+        {
+            if (block == null || block.text == null) continue;
+            if (block.y <= question.y + 45 || block.y >= yearBlock.y - 50) continue;
+            int value = parseDobMonthValue(block.text);
+            if (value <= 0) continue;
+            if (monthBlock == null || block.y < monthBlock.y)
+            {
+                monthBlock = block;
+                month = value;
+            }
+        }
+        if (monthBlock == null) return null;
+
+        HSQTools.TextBlock dayBlock = null;
+        int day = -1;
+        for (HSQTools.TextBlock block : visible)
+        {
+            if (block == null || block.text == null) continue;
+            if (block.y <= monthBlock.y + 45 || block.y >= yearBlock.y - 35) continue;
+            String raw = block.text.trim();
+            if (!raw.matches("^\\d{1,2}$")) continue;
+            int value;
+            try { value = Integer.parseInt(raw); } catch (Exception ignored) { continue; }
+            if (value < 1 || value > 31) continue;
+            if (dayBlock == null || block.y > dayBlock.y)
+            {
+                dayBlock = block;
+                day = value;
+            }
+        }
+        if (dayBlock == null) return null;
+
+        int firstGap = dayBlock.y - monthBlock.y;
+        int secondGap = yearBlock.y - dayBlock.y;
+        if (firstGap < 55 || firstGap > 360 || secondGap < 55 || secondGap > 360) return null;
+        if (Math.abs(firstGap - secondGap) > 180) return null;
+
+        return new StackedDobState(monthBlock, dayBlock, yearBlock, month, day, year);
+    }
+
+    private StackedDobState findStackedDobStateFromXml()
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return null;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            android.graphics.Rect questionRect = null;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String clean = normalizeDobText(node.getAttribute("text") + " " + node.getAttribute("content-desc"));
+                if (!isDobQuestionText(clean)) continue;
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+                if (questionRect == null || r.height() < questionRect.height()) questionRect = r;
+            }
+            if (questionRect == null) return null;
+
+            int overlayTop = findLikelyBottomOverlayTop(nodes);
+            int bottomLimit = overlayTop > 0 ? overlayTop - 12 : heightOfScreen - 100;
+            List<DobInputTarget> controls = new ArrayList<>();
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                if ("false".equals(node.getAttribute("enabled"))) continue;
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() < widthOfScreen * 0.55f || r.height() < 45 || r.height() > 260) continue;
+                if (r.top <= questionRect.bottom + 8 || r.centerY() >= bottomLimit) continue;
+
+                String clazz = node.getAttribute("class") == null ? "" : node.getAttribute("class").toLowerCase(Locale.ROOT);
+                boolean interactive = "true".equals(node.getAttribute("clickable"))
+                        || "true".equals(node.getAttribute("focusable"))
+                        || clazz.contains("spinner")
+                        || clazz.contains("button")
+                        || clazz.contains("edittext")
+                        || clazz.contains("autocomplete");
+                if (!interactive) continue;
+
+                String raw = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                String clean = normalizeDobText(raw);
+                if (clean.isEmpty() || clean.length() > 36 || isDropdownNavigationButtonText(clean) || clean.contains("cookie")) continue;
+
+                boolean duplicateRow = false;
+                for (int j = 0; j < controls.size(); j++)
+                {
+                    DobInputTarget old = controls.get(j);
+                    if (Math.abs(old.rect.centerY() - r.centerY()) <= 28)
+                    {
+                        duplicateRow = true;
+                        if ((long) r.width() * r.height() < (long) old.rect.width() * old.rect.height())
+                            controls.set(j, new DobInputTarget(node, r));
+                        break;
+                    }
+                }
+                if (!duplicateRow) controls.add(new DobInputTarget(node, r));
+            }
+
+            controls.sort(Comparator.comparingInt(x -> x.rect.centerY()));
+            if (controls.size() < 3) return null;
+
+            for (int i = 0; i <= controls.size() - 3; i++)
+            {
+                DobInputTarget monthControl = controls.get(i);
+                DobInputTarget dayControl = controls.get(i + 1);
+                DobInputTarget yearControl = controls.get(i + 2);
+                int firstGap = dayControl.rect.centerY() - monthControl.rect.centerY();
+                int secondGap = yearControl.rect.centerY() - dayControl.rect.centerY();
+                if (firstGap < 55 || firstGap > 360 || secondGap < 55 || secondGap > 360) continue;
+                if (Math.abs(firstGap - secondGap) > 120) continue;
+                if (Math.abs(monthControl.rect.left - dayControl.rect.left) > 100
+                        || Math.abs(dayControl.rect.left - yearControl.rect.left) > 100) continue;
+
+                String monthRaw = (monthControl.node.getAttribute("text") + " " + monthControl.node.getAttribute("content-desc")).trim();
+                String dayRaw = (dayControl.node.getAttribute("text") + " " + dayControl.node.getAttribute("content-desc")).trim();
+                String yearRaw = (yearControl.node.getAttribute("text") + " " + yearControl.node.getAttribute("content-desc")).trim();
+                int month = parseDobMonthValue(monthRaw);
+                int day = parseDobNumberValue(dayRaw, 1, 31);
+                int year = parseDobNumberValue(yearRaw, 1900, 2100);
+                if (month <= 0 && !normalizeDobText(monthRaw).matches("^(thang|month|mm|chon|select)$")) continue;
+                if (day <= 0 && !normalizeDobText(dayRaw).matches("^(ngay|day|dd|chon|select)$")) continue;
+                if (year <= 0 && !normalizeDobText(yearRaw).matches("^(nam|year|yy|yyyy|chon|select)$")) continue;
+
+                return new StackedDobState(
+                        new HSQTools.TextBlock(monthRaw, monthControl.rect.centerX(), monthControl.rect.centerY()),
+                        new HSQTools.TextBlock(dayRaw, dayControl.rect.centerX(), dayControl.rect.centerY()),
+                        new HSQTools.TextBlock(yearRaw, yearControl.rect.centerX(), yearControl.rect.centerY()),
+                        month, day, year);
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return null;
+    }
+
+    private HSQTools.TextBlock findDobQuestionBlock(List<? extends HSQTools.TextBlock> visible)
+    {
+        if (visible == null) return null;
+        HSQTools.TextBlock best = null;
+        for (HSQTools.TextBlock block : visible)
+        {
+            if (block == null || block.text == null || block.y <= 180) continue;
+            String clean = normalizeDobText(block.text);
+            if (!isDobQuestionText(clean)) continue;
+            if (best == null || block.y < best.y) best = block;
+        }
+        return best;
+    }
+
+    private boolean isDobQuestionText(String clean)
+    {
+        if (clean == null || clean.isEmpty()) return false;
+        return clean.contains("ngaysinh")
+                || clean.contains("khinaobansinh")
+                || clean.contains("whenwereyouborn")
+                || clean.contains("dateofbirth")
+                || clean.contains("birthdate")
+                || clean.contains("birthday");
+    }
+
+    private boolean isDobDropdownListExpanded(List<? extends HSQTools.TextBlock> visible)
+    {
+        HSQTools.TextBlock question = findDobQuestionBlock(visible);
+        if (question == null) return false;
+
+        int monthCount = 0;
+        int dayCount = 0;
+        int yearCount = 0;
+        for (HSQTools.TextBlock block : visible)
+        {
+            if (block == null || block.text == null || block.y <= question.y + 40) continue;
+            String raw = block.text.trim();
+            if (parseDobMonthValue(raw) > 0) monthCount++;
+            if (raw.matches("^\\d{1,2}$"))
+            {
+                try
+                {
+                    int value = Integer.parseInt(raw);
+                    if (value >= 1 && value <= 31) dayCount++;
+                }
+                catch (Exception ignored) {}
+            }
+            if (raw.matches("^(19|20)\\d{2}$")) yearCount++;
+        }
+        return monthCount >= 5 || dayCount >= 6 || yearCount >= 5;
+    }
+
+    private boolean isDobDropdownListExpandedInXml()
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return false;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            boolean hasDobQuestion = false;
+            int monthCount = 0;
+            int dayCount = 0;
+            int yearCount = 0;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String raw = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                String clean = normalizeDobText(raw);
+                if (isDobQuestionText(clean)) hasDobQuestion = true;
+                if (parseDobMonthValue(raw) > 0) monthCount++;
+                if (parseDobNumberValue(raw, 1, 31) > 0) dayCount++;
+                if (parseDobNumberValue(raw, 1900, 2100) > 0) yearCount++;
+            }
+            return hasDobQuestion && (monthCount >= 5 || dayCount >= 6 || yearCount >= 5);
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+    }
+
+    private int parseDobNumberValue(String raw, int min, int max)
+    {
+        if (raw == null) return -1;
+        String clean = raw.trim();
+        if (!clean.matches("^\\d{1,4}$")) return -1;
+        try
+        {
+            int value = Integer.parseInt(clean);
+            return value >= min && value <= max ? value : -1;
+        }
+        catch (Exception ignored)
+        {
+            return -1;
+        }
+    }
+
+    private int classifyExplicitDobDropdownPart(String rawTarget)
+    {
+        String clean = normalizeDobText(rawTarget);
+        if (clean.matches("^(thang|month|mm)$")) return 0;
+        if (clean.matches("^(ngay|day|dd)$")) return 1;
+        if (clean.matches("^(nam|year|yy|yyyy)$")) return 2;
+        return -1;
+    }
+
+    private int inferDobPartFromDesiredValue(String rawTarget, RegistrationInfo profile)
+    {
+        if (rawTarget == null) return -1;
+        String clean = normalizeDobText(rawTarget);
+        int month = parseDobMonthValue(rawTarget);
+        if (month > 0 && (clean.contains("thang") || clean.matches("^(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)$")))
+            return 0;
+
+        String digits = rawTarget.trim();
+        if (digits.matches("^(19|20)\\d{2}$")) return 2;
+        if (digits.matches("^\\d{1,2}$") && profile != null)
+        {
+            int value;
+            try { value = Integer.parseInt(digits); } catch (Exception ignored) { return -1; }
+            if (value == profile.getDayOfBirth()) return 1;
+            if (value == profile.getMonthOfBirth()) return 0;
+        }
+        return -1;
+    }
+
+    private boolean isCurrentStackedDobValue(String rawTarget, StackedDobState state)
+    {
+        if (rawTarget == null || state == null) return false;
+        String target = normalizeDobText(rawTarget);
+        return target.equals(normalizeDobText(state.monthBlock.text))
+                || target.equals(normalizeDobText(state.dayBlock.text))
+                || target.equals(normalizeDobText(state.yearBlock.text));
+    }
+
+    private int findFirstMismatchedDobPart(StackedDobState state, RegistrationInfo profile)
+    {
+        if (state == null || profile == null) return -1;
+        if (profile.getMonthOfBirth() >= 1 && profile.getMonthOfBirth() <= 12 && state.month != profile.getMonthOfBirth()) return 0;
+        if (profile.getDayOfBirth() >= 1 && profile.getDayOfBirth() <= 31 && state.day != profile.getDayOfBirth()) return 1;
+        if (profile.getYearOfBirth() >= 1900 && profile.getYearOfBirth() <= 2100 && state.year != profile.getYearOfBirth()) return 2;
+        return -1;
+    }
+
+    private int getExpectedDobPartValue(RegistrationInfo profile, int part)
+    {
+        if (profile == null) return -1;
+        if (part == 0) return profile.getMonthOfBirth();
+        if (part == 1) return profile.getDayOfBirth();
+        return part == 2 ? profile.getYearOfBirth() : -1;
+    }
+
+    private boolean openStackedDobDropdownPart(StackedDobState state, int part)
+    {
+        HSQTools.TextBlock block = state == null ? null : state.blockForPart(part);
+        if (block == null) return false;
+
+        int clickX = (int) (widthOfScreen * 0.88f);
+        int clickY = block.y;
+        DobInputTarget xmlTarget = findInteractiveDobDropdownNearY(clickY);
+        boolean semanticClicked = false;
+        if (xmlTarget != null)
+        {
+            String raw = (xmlTarget.node.getAttribute("text") + " " + xmlTarget.node.getAttribute("content-desc")).trim();
+            semanticClicked = tryPerformAccessibilityClickForXmlNavigation(
+                    xmlTarget.node.getAttribute("resource-id"), raw, xmlTarget.rect);
+            clickX = Math.min(xmlTarget.rect.right - 24, xmlTarget.rect.left + (int) (xmlTarget.rect.width() * 0.88f));
+            clickY = xmlTarget.rect.centerY();
+        }
+
+        String partName = part == 0 ? "month" : (part == 1 ? "day" : "year");
+        updateNotificationContent("DOB doc: mo dung dropdown " + partName + " tai " + clickX + "," + clickY);
+        if (!semanticClicked) click(clickX, clickY, false);
+        delay(1800);
+        return true;
+    }
+
+    private DobInputTarget findInteractiveDobDropdownNearY(int expectedY)
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return null;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            DobInputTarget best = null;
+            int bestScore = Integer.MAX_VALUE;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                if ("false".equals(node.getAttribute("enabled"))) continue;
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() < widthOfScreen * 0.45f || r.height() < 40 || r.height() > 280) continue;
+                if (Math.abs(r.centerY() - expectedY) > 90) continue;
+
+                String clazz = node.getAttribute("class") == null ? "" : node.getAttribute("class").toLowerCase(Locale.ROOT);
+                boolean interactive = "true".equals(node.getAttribute("clickable"))
+                        || "true".equals(node.getAttribute("focusable"))
+                        || clazz.contains("spinner")
+                        || clazz.contains("button")
+                        || clazz.contains("edittext")
+                        || clazz.contains("autocomplete");
+                if (!interactive) continue;
+
+                String clean = normalizeDobText(node.getAttribute("text") + " " + node.getAttribute("content-desc"));
+                if (isDropdownNavigationButtonText(clean) || clean.contains("cookie")) continue;
+
+                int score = Math.abs(r.centerY() - expectedY) * 10;
+                if ("true".equals(node.getAttribute("clickable"))) score -= 300;
+                if (clazz.contains("spinner") || clazz.contains("button")) score -= 220;
+                score += Math.min(300, r.height());
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = new DobInputTarget(node, r);
+                }
+            }
+            return best;
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
+    private int parseDobMonthValue(String raw)
+    {
+        if (raw == null) return -1;
+        String trimmed = raw.trim();
+        if (trimmed.matches("^\\d{1,2}$"))
+        {
+            try
+            {
+                int value = Integer.parseInt(trimmed);
+                return value >= 1 && value <= 12 ? value : -1;
+            }
+            catch (Exception ignored) { return -1; }
+        }
+
+        String clean = normalizeDobText(raw);
+        if (clean.startsWith("thang")) clean = clean.substring(5);
+        if (clean.equals("muoihai") || clean.equals("december") || clean.equals("dec")) return 12;
+        if (clean.equals("muoimot") || clean.equals("november") || clean.equals("nov")) return 11;
+        if (clean.equals("muoi") || clean.equals("october") || clean.equals("oct")) return 10;
+        if (clean.equals("chin") || clean.equals("september") || clean.equals("sept") || clean.equals("sep")) return 9;
+        if (clean.equals("tam") || clean.equals("august") || clean.equals("aug")) return 8;
+        if (clean.equals("bay") || clean.equals("july") || clean.equals("jul")) return 7;
+        if (clean.equals("sau") || clean.equals("june") || clean.equals("jun")) return 6;
+        if (clean.equals("nam") || clean.equals("may")) return 5;
+        if (clean.equals("tu") || clean.equals("april") || clean.equals("apr")) return 4;
+        if (clean.equals("ba") || clean.equals("march") || clean.equals("mar")) return 3;
+        if (clean.equals("hai") || clean.equals("february") || clean.equals("feb")) return 2;
+        if (clean.equals("mot") || clean.equals("january") || clean.equals("jan")) return 1;
+        return -1;
+    }
+
     private boolean tryRepairDobTripleInputsBeforeNext()
     {
         RegistrationInfo profile = activeInfoProfile;
@@ -7366,6 +8677,81 @@ public class StartAuto extends HSQService
         return clazz.contains("EditText") || clazz.contains("AutoCompleteTextView");
     }
 
+    // 0 = no popup, 1 = popup open without a selected option, 2 = popup open with a checked option.
+    private int getOpenDropdownPopupStateFromXml()
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return 0;
+
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element listNode = (org.w3c.dom.Element) nodes.item(i);
+                String clazz = listNode.getAttribute("class").toLowerCase(Locale.ROOT);
+                if (!clazz.contains("listview") && !clazz.contains("recyclerview")) continue;
+
+                android.graphics.Rect listRect = HSQTools.parseBoundsFromXml(listNode.getAttribute("bounds"));
+                if (listRect == null || listRect.width() < widthOfScreen * 0.50f || listRect.height() < 120)
+                    continue;
+
+                int optionCount = 0;
+                int androidTextOptionCount = 0;
+                boolean hasCheckedOption = false;
+                org.w3c.dom.NodeList descendants = listNode.getElementsByTagName("node");
+                for (int j = 0; j < descendants.getLength(); j++)
+                {
+                    org.w3c.dom.Element option = (org.w3c.dom.Element) descendants.item(j);
+                    String optionClass = option.getAttribute("class").toLowerCase(Locale.ROOT);
+                    String optionText = (option.getAttribute("text") + " " + option.getAttribute("content-desc")).trim();
+                    boolean optionLike = optionClass.contains("checkedtextview")
+                            || optionClass.contains("radiobutton")
+                            || "true".equals(option.getAttribute("checkable"));
+                    if (!optionLike || optionText.isEmpty() || "false".equals(option.getAttribute("enabled"))) continue;
+
+                    optionCount++;
+                    String optionId = option.getAttribute("resource-id").toLowerCase(Locale.ROOT);
+                    if (optionId.equals("android:id/text1") || optionId.endsWith("/text1")) androidTextOptionCount++;
+                    if ("true".equals(option.getAttribute("checked")) || "true".equals(option.getAttribute("selected")))
+                    {
+                        hasCheckedOption = true;
+                    }
+                }
+
+                boolean dialogAncestor = hasXmlAncestorResourceHint(listNode,
+                        "android:id/parentpanel", "android:id/custompanel", "android:id/custom");
+                boolean androidSpinnerList = androidTextOptionCount >= 2;
+                if (optionCount >= 2 && (dialogAncestor || androidSpinnerList))
+                {
+                    return hasCheckedOption ? 2 : 1;
+                }
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return 0;
+    }
+
+    private boolean hasXmlAncestorResourceHint(org.w3c.dom.Element node, String... hints)
+    {
+        org.w3c.dom.Node current = node;
+        while (current instanceof org.w3c.dom.Element)
+        {
+            String resourceId = ((org.w3c.dom.Element) current).getAttribute("resource-id").toLowerCase(Locale.ROOT);
+            for (String hint : hints)
+            {
+                if (hint != null && !hint.isEmpty() && resourceId.contains(hint.toLowerCase(Locale.ROOT))) return true;
+            }
+            current = current.getParentNode();
+        }
+        return false;
+    }
+
     private String normalizeDobText(String input)
     {
         if (input == null) return "";
@@ -7374,11 +8760,10 @@ public class StartAuto extends HSQService
 
     private boolean shouldBlockClickButtonOnUnfinishedPicker(List<TextBlock> visibleBlocks)
     {
+        int yearOptionCount = 0;
+        boolean hasDobPlaceholder = false;
         try
         {
-            int yearOptionCount = 0;
-            boolean hasDobPlaceholder = false;
-
             if (visibleBlocks != null)
             {
                 for (TextBlock block : visibleBlocks)
@@ -7397,10 +8782,10 @@ public class StartAuto extends HSQService
                 }
             }
 
-            if (hasDobPlaceholder || yearOptionCount >= 5) return true;
+            if (hasDobPlaceholder) return true;
 
             String xml = HSQTools.getFlexibleXML();
-            if (xml == null || xml.isEmpty()) return false;
+            if (xml == null || xml.isEmpty()) return yearOptionCount >= 5;
             if (xml.contains("--MM--") || xml.contains("--DD--") || xml.contains("--YY--") || xml.contains("--YYYY--")) return true;
 
             javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
@@ -7410,30 +8795,43 @@ public class StartAuto extends HSQService
 
             int radioLikeCount = 0;
             int xmlYearCount = 0;
+            boolean hasSelectedYearChoice = false;
             for (int i = 0; i < nodes.getLength(); i++)
             {
                 org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String clazz = node.getAttribute("class");
+                String rawText = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                boolean radioLike = clazz.contains("RadioButton") || "true".equals(node.getAttribute("checkable"));
+                boolean yearLike = rawText.matches(".*\\b(19|20)\\d{2}\\b.*");
+
+                // A checked year may be collapsed above/below the viewport after the list scrolls.
+                // It still completes the picker and must not prevent the following Next/Continue click.
+                if (radioLike && yearLike
+                        && ("true".equals(node.getAttribute("checked"))
+                        || "true".equals(node.getAttribute("selected"))))
+                {
+                    hasSelectedYearChoice = true;
+                }
+
                 android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
                 if (r == null || r.centerY() <= 180 || r.centerY() >= heightOfScreen - 50) continue;
 
-                String clazz = node.getAttribute("class");
-                String rawText = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
-
-                if (clazz.contains("RadioButton") || "true".equals(node.getAttribute("checkable")))
+                if (radioLike)
                 {
                     radioLikeCount++;
                 }
-                if (rawText.matches(".*\\b(19|20)\\d{2}\\b.*"))
+                if (yearLike)
                 {
                     xmlYearCount++;
                 }
             }
 
-            return radioLikeCount >= 5 && xmlYearCount >= 5;
+            if (hasSelectedYearChoice) return false;
+            return yearOptionCount >= 5 || (radioLikeCount >= 5 && xmlYearCount >= 5);
         }
         catch (Exception ignored)
         {
-            return false;
+            return hasDobPlaceholder || yearOptionCount >= 5;
         }
     }
 
@@ -7442,6 +8840,8 @@ public class StartAuto extends HSQService
         int slVuot = 0;
         int navRevealSwipeCount = 0;
         int dobRepairAttempt = 0;
+        int dropdownPopupCloseAttempt = 0;
+        int validationRepairAttempt = 0;
         String currentXml = "";
 
         Matcher matchBtn = java.util.regex.Pattern.compile("\\{([^{}]+)\\}").matcher(step);
@@ -7452,11 +8852,12 @@ public class StartAuto extends HSQService
         final String cleanTargetNorm = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawTarget));
         final String targetNorm = isArrow ? rawTarget : cleanTargetNorm;
         final boolean isCardNextTarget = cleanTargetNorm.matches("^(nextthe|nextcard|cardnext|chuyenthe|chuyenthetheo|thetieptheo|tiepthenay|thesau|muitenthe|arrowcard|nextattribute|attribute_next)$");
-        final boolean isPageNextTarget = cleanTargetNorm.matches("^(nextpage|pagenext|chuyentrang|trangtieptheo|tieptheotrang|submitpage|submitform|hoanthanhtrang)$");
+        isNextCard = isCardNextTarget;
+        final boolean isPageNextTarget = cleanTargetNorm.matches("^(nextpage|pagenext|ketiep|chuyentrang|trangtieptheo|tieptheotrang|submitpage|submitform|hoanthanhtrang)$");
         final boolean isAgreeOnlyTarget = cleanTargetNorm.matches("^(agree|accept|dongy|toidongy|iagree|chapnhan)$");
 
         // Phan biet next the va next page. Dau > tu AI chi la tin hieu mo ho, code van phai doc context man hinh.
-        final boolean isNextIntent = isArrow || isCardNextTarget || isPageNextTarget || cleanTargetNorm.matches("^(continue|next|submit|tieptuc|tieptheo|tiepthe|trangtieptheo|tieptheo>|done|gui|send|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep|batdau|muiten|arrow|tien|tienlen)$");
+        final boolean isNextIntent = isArrow || isCardNextTarget || isPageNextTarget || cleanTargetNorm.matches("^(continue|next|submit|ketiep|tieptuc|tieptheo|tiepthe|trangtieptheo|tieptheo>|done|gui|send|agree|accept|agreeandcontinue|>|>>|>>>|gotonextquestion|fwd|forward|tiep|batdau|muiten|arrow|tien|tienlen)$");
         final boolean shouldPreferPageNavigationXml = isNextIntent && !isCardNextTarget && !isAgreeOnlyTarget;
         checkButtonAgainLoop:
         while (true)
@@ -7470,6 +8871,23 @@ public class StartAuto extends HSQService
                 List<HSQTools.TextBlock> smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
                 phoneScreen.addAll(smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
                 phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
+                int openDropdownPopupState = getOpenDropdownPopupStateFromXml();
+                if (openDropdownPopupState != 0)
+                {
+                    if (openDropdownPopupState == 2 && dropdownPopupCloseAttempt < 2)
+                    {
+                        dropdownPopupCloseAttempt++;
+                        updateNotificationContent("ClickButton: dropdown da chon nhung popup con mo, dong popup truoc");
+                        globalBack();
+                        delay(1200);
+                        continue;
+                    }
+
+                    updateNotificationContent("Chan clickbutton: dropdown popup dang mo/chua chon xong");
+                    List<TextBlock> blockedScreen = smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                    blockedScreen.add(new TextBlock("BLOCKED_CLICKBUTTON_OPEN_DROPDOWN", 0, 0));
+                    return blockedScreen;
+                }
                 if (isNextIntent && dobRepairAttempt < 2 && tryRepairDobTripleInputsBeforeNext())
                 {
                     dobRepairAttempt++;
@@ -7481,6 +8899,31 @@ public class StartAuto extends HSQService
                     List<TextBlock> blockedScreen = smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
                     blockedScreen.add(new TextBlock("BLOCKED_CLICKBUTTON_DROPDOWN_OR_DOB_PLACEHOLDER", 0, 0));
                     return blockedScreen;
+                }
+
+                if (isNextIntent && validationRepairAttempt < 2)
+                {
+                    int validationState = handleProfileBackedInputValidationFromXml();
+                    if (validationState == 2)
+                    {
+                        validationRepairAttempt++;
+                        updateNotificationContent("ClickButton: da sua input theo validator, thu Next lai");
+                        delay(1200);
+                        continue;
+                    }
+                }
+
+                if (isNextIntent && tryClickDynamicBottomCtaFromXml(step, smartList, slVuot))
+                {
+                    break checkButtonAgainLoop;
+                }
+
+                // Some embedded surveys (for example RepTrak inside Offerwall) expose no survey
+                // controls in Accessibility XML. OCR can still see ">>", but its text bounds may
+                // miss the real WebView hit-box. Prefer the distinctive green bitmap button first.
+                if (isNextIntent && tryClickGreenFooterNextButton(step, smartList, slVuot))
+                {
+                    break checkButtonAgainLoop;
                 }
 
                 if (HSQTools.getImageExistss(
@@ -7513,6 +8956,7 @@ public class StartAuto extends HSQService
                             String clazz = node.getAttribute("class");
                             String text = node.getAttribute("text");
                             String desc = node.getAttribute("content-desc");
+                            String resId = node.getAttribute("resource-id");
                             String clickable = node.getAttribute("clickable"); // 🔥 THUỐC ĐỘC DIỆT GHOST NODE
 
                             // 1. Phải là dạng Button/Image trống không có chữ (Tuyệt đối loại trừ RadioButton, CheckBox)
@@ -7535,6 +8979,11 @@ public class StartAuto extends HSQService
                                         {
                                             continue;
                                         }
+
+                                        if (isXmlDropdownNavigationTrap(nodes, node, r)) continue;
+                                        boolean explicitForwardControl = isForwardNavigationResourceId(resId);
+                                        boolean nearbyNextText = hasExplicitNextOcrNearRect(r, smartList);
+                                        if (!explicitForwardControl && !nearbyNextText) continue;
 
 
                                         // 3. 🔥 CHỐT CHẶN 2: Kiểm tra kích thước (Tránh tracking pixel 1x1 và tránh ảnh nền bự chà bá)
@@ -7591,8 +9040,29 @@ public class StartAuto extends HSQService
                 }
 
                 // 🌟 TẦNG 2.2: LƯỚI QUÉT TIÊU CHUẨN (MẮT THẦN OCR)
+                if (isCardNextTarget && tryClickITileNextButtonFromXml(step, smartList, slVuot))
+                {
+                    break checkButtonAgainLoop;
+                }
+
                 if (shouldPreferPageNavigationXml)
                 {
+                    // next_page is explicit: prefer the XML node/ACTION_CLICK before OCR coordinates.
+                    if (isPageNextTarget)
+                    {
+                        int explicitPageNavAction = tryClickPageNavigationFromXml(step, smartList, slVuot, navRevealSwipeCount < 8);
+                        if (explicitPageNavAction == 1)
+                        {
+                            break checkButtonAgainLoop;
+                        }
+                        if (explicitPageNavAction == 2)
+                        {
+                            navRevealSwipeCount++;
+                            delay(1800);
+                            continue;
+                        }
+                    }
+
                     if (tryClickVisibleNextButtonFromSmartList(step, smartList, slVuot))
                     {
                         break checkButtonAgainLoop;
@@ -7603,16 +9073,19 @@ public class StartAuto extends HSQService
                         break checkButtonAgainLoop;
                     }
 
-                    int navAction = tryClickPageNavigationFromXml(step, smartList, slVuot, navRevealSwipeCount < 8);
-                    if (navAction == 1)
+                    if (!isPageNextTarget)
                     {
-                        break checkButtonAgainLoop;
-                    }
-                    if (navAction == 2)
-                    {
-                        navRevealSwipeCount++;
-                        delay(1800);
-                        continue;
+                        int navAction = tryClickPageNavigationFromXml(step, smartList, slVuot, navRevealSwipeCount < 8);
+                        if (navAction == 1)
+                        {
+                            break checkButtonAgainLoop;
+                        }
+                        if (navAction == 2)
+                        {
+                            navRevealSwipeCount++;
+                            delay(1800);
+                            continue;
+                        }
                     }
                 }
 
@@ -7624,7 +9097,7 @@ public class StartAuto extends HSQService
                 int bestSmartScore = Integer.MIN_VALUE;
                 for (HSQTools.TextBlock candidate : smartList)
                 {
-                    int score = getClickButtonOcrMatchScore(candidate, targetNorm, isArrow, isNextIntent, isAgreeOnlyTarget);
+                    int score = getClickButtonOcrMatchScore(candidate, targetNorm, isArrow, isNextIntent, isAgreeOnlyTarget, smartList);
                     if (score > bestSmartScore)
                     {
                         bestSmartScore = score;
@@ -7672,12 +9145,13 @@ public class StartAuto extends HSQService
                     int bottomOverlayTop = findLikelyBottomOverlayTop(nodes);
 
                     android.graphics.Rect bestXmlBtnRect = null;
-                    int maxCenterY = 0;
+                    int bestXmlNextScore = Integer.MIN_VALUE;
                     int bestXmlCustomScore = Integer.MIN_VALUE;
 
                     for (int i = 0; i < nodes.getLength(); i++)
                     {
                         org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                        if ("false".equals(node.getAttribute("enabled"))) continue;
                         String text = node.getAttribute("text");
                         String desc = node.getAttribute("content-desc");
                         String resId = node.getAttribute("resource-id");
@@ -7698,10 +9172,10 @@ public class StartAuto extends HSQService
                             if (!isInvalidTopText && !isQuotedText && !(!isAgreeOnlyTarget && isConsentChoiceOnly(cleanFullText))) {
                                 if (containsNextArrowGlyph(rawFullText))
                                     isMatch = true;
-                                if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|tiepthe|trangtieptheo|tieptheo>|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|>|>>|>>>|gotonextquestion|fwd|forward|tiep|arrowright)$"))
+                                if (cleanFullText.matches("^(continue|next|submit|ketiep|tieptuc|tieptheo|tiepthe|trangtieptheo|tieptheo>|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|>|>>|>>>|gotonextquestion|fwd|forward|tiep|arrowright)$"))
                                     isMatch = true;
                                 // Tóm sống cái nút chuyển thẻ của bọn GfK/NIQ
-                                if (resId.toLowerCase().contains("next") || resId.toLowerCase().contains("continue") || resId.toLowerCase().contains("btn_forward") || resId.toLowerCase().contains("navright") || resId.toLowerCase().contains("nbtn"))
+                                if (isForwardNavigationResourceId(resId))
                                     isMatch = true;
                             }
                         }
@@ -7737,7 +9211,8 @@ public class StartAuto extends HSQService
                             android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
                             if (r != null)
                             {
-                                boolean isRealArrow = cleanFullText.contains("arrowright") || resId.toLowerCase().contains("navright");
+                                if (isXmlDropdownNavigationTrap(nodes, node, r)) continue;
+                                boolean isRealArrow = cleanFullText.contains("arrowright") || resId.toLowerCase(Locale.US).contains("navright");
                                 boolean isGiantNode = r.height() > 800; // Không có cái nút nào cao tới 800px cả, chắc chắn là thẻ Container Layout
 
                                 // 🌟 KIM BÀI MIỄN TỬ: Nếu đúng là mũi tên xịn thì thả cửa, bất chấp tọa độ!
@@ -7747,15 +9222,26 @@ public class StartAuto extends HSQService
                                 if (passFilter)
                                 {
                                     if (isNextIntent) {
-                                        // Buff 10.000 điểm cho mũi tên xịn để nó đánh bại mọi nút Next/Submit rác dưới đáy!
-                                        int scoreY = r.centerY() + (isRealArrow ? 10000 : 0);
+                                        String clazzLower = node.getAttribute("class").toLowerCase(Locale.US);
+                                        boolean directlyInteractive = "true".equals(node.getAttribute("clickable"))
+                                                || "true".equals(node.getAttribute("focusable"))
+                                                || clazzLower.contains("button")
+                                                || clazzLower.contains("image");
 
-                                        if (scoreY > maxCenterY + 20) {
-                                            maxCenterY = scoreY;
+                                        // Parent WebView thường copy nguyên text ">>" của Button con và có cùng Y.
+                                        // Ưu tiên control bấm được thật; vẫn giữ parent làm fallback nếu XML không có node con.
+                                        int candidateScore = r.centerY() + (isRealArrow ? 10000 : 0);
+                                        if (directlyInteractive) candidateScore += 6000;
+                                        if (clazzLower.contains("button")) candidateScore += 2500;
+                                        if (isForwardNavigationResourceId(resId)) candidateScore += 1500;
+                                        if (!directlyInteractive && r.width() > widthOfScreen * 0.70f) candidateScore -= 5000;
+
+                                        if (candidateScore > bestXmlNextScore + 20) {
+                                            bestXmlNextScore = candidateScore;
                                             bestXmlBtnRect = r;
-                                        } else if (Math.abs(scoreY - maxCenterY) <= 20) {
+                                        } else if (Math.abs(candidateScore - bestXmlNextScore) <= 20) {
                                             if (bestXmlBtnRect == null || r.centerX() > bestXmlBtnRect.centerX()) {
-                                                maxCenterY = scoreY;
+                                                bestXmlNextScore = candidateScore;
                                                 bestXmlBtnRect = r;
                                             }
                                         }
@@ -7800,11 +9286,6 @@ public class StartAuto extends HSQService
                 }
                 catch (Exception ignored)
                 {
-                }
-
-                if (isNextIntent && tryClickGreenFooterNextButton(step, smartList, slVuot))
-                {
-                    break checkButtonAgainLoop;
                 }
 
                 // TẦNG 4: XỬ LÝ VUỐT (NHƯ CŨ)
@@ -7947,13 +9428,168 @@ public class StartAuto extends HSQService
         return null;
     }
 
-    private int getClickButtonOcrMatchScore(HSQTools.TextBlock block, String targetNorm, boolean isArrow, boolean isNextIntent, boolean isAgreeOnlyTarget)
+    private boolean isXmlDropdownNavigationTrap(org.w3c.dom.NodeList nodes, org.w3c.dom.Element node, android.graphics.Rect rect)
+    {
+        if (node == null || rect == null) return false;
+
+        org.w3c.dom.Node current = node;
+        while (current instanceof org.w3c.dom.Element)
+        {
+            org.w3c.dom.Element element = (org.w3c.dom.Element) current;
+            String clazz = element.getAttribute("class").toLowerCase(Locale.ROOT);
+            String meta = (element.getAttribute("resource-id") + " " + element.getAttribute("content-desc")).toLowerCase(Locale.ROOT);
+            if (isDropdownClassOrId(element)
+                    || clazz.contains("spinner")
+                    || clazz.contains("autocomplete")
+                    || clazz.contains("edittext")
+                    || clazz.contains("checkedtextview")
+                    || clazz.contains("listview")
+                    || meta.contains("arrow_drop_down")
+                    || meta.contains("keyboard_arrow_down")
+                    || meta.contains("expand_more")
+                    || meta.contains("chevron_down")
+                    || meta.contains("caret_down"))
+            {
+                return true;
+            }
+            current = current.getParentNode();
+        }
+
+        if (nodes == null) return false;
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Element candidate = (org.w3c.dom.Element) nodes.item(i);
+            String clazz = candidate.getAttribute("class").toLowerCase(Locale.ROOT);
+            if (!isDropdownClassOrId(candidate)
+                    && !clazz.contains("spinner")
+                    && !clazz.contains("autocomplete")
+                    && !clazz.contains("edittext"))
+            {
+                continue;
+            }
+
+            android.graphics.Rect candidateRect = HSQTools.parseBoundsFromXml(candidate.getAttribute("bounds"));
+            if (candidateRect == null || candidateRect.width() <= 0 || candidateRect.height() <= 0) continue;
+            candidateRect.inset(-32, -24);
+            if (candidateRect.contains(rect.centerX(), rect.centerY())) return true;
+        }
+        return false;
+    }
+
+    private boolean hasExplicitNextOcrNearRect(android.graphics.Rect rect, List<HSQTools.TextBlock> blocks)
+    {
+        if (rect == null || blocks == null) return false;
+        android.graphics.Rect probe = new android.graphics.Rect(rect);
+        probe.inset(-48, -48);
+
+        for (HSQTools.TextBlock block : blocks)
+        {
+            if (block == null || block.text == null || !probe.contains(block.x, block.y)) continue;
+            String raw = block.text.trim();
+            String compactRaw = raw.replaceAll("\\s+", "");
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+            boolean nextWord = clean.matches("^(ketiep|tieptheo|tiepthe|tieptuc|next|continue|submit|done|gui|send|forward|fwd|batdau|agreeandcontinue)$");
+            boolean strongArrow = compactRaw.equals(">>")
+                    || compactRaw.equals(">>>")
+                    || compactRaw.equals("->")
+                    || compactRaw.equals("=>")
+                    || compactRaw.equals("\u2192")
+                    || compactRaw.equals("\u21D2")
+                    || compactRaw.equals("\u226B");
+            if (nextWord || strongArrow) return true;
+        }
+        return false;
+    }
+
+    private boolean isLikelyDropdownChevronOcr(HSQTools.TextBlock candidate, List<HSQTools.TextBlock> blocks)
+    {
+        if (candidate == null || candidate.text == null) return false;
+        String raw = candidate.text.trim().replaceAll("\\s+", "");
+        if (!raw.equals(">") && !raw.equals("\u203A") && !raw.equals("\uFF1E")) return false;
+
+        if (isPointInsideExplicitXmlDropdownControl(candidate.x, candidate.y)) return true;
+        if (blocks == null) return false;
+
+        for (HSQTools.TextBlock block : blocks)
+        {
+            if (block == null || block == candidate || block.text == null) continue;
+            int dx = candidate.x - block.x;
+            int dy = Math.abs(candidate.y - block.y);
+            if (dx < 45 || dx > widthOfScreen * 0.75f || dy > 80) continue;
+
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(block.text));
+            if (clean.isEmpty() || clean.length() > 60) continue;
+            if (clean.matches("^(back|quaylai|ketiep|tieptheo|tiepthe|tieptuc|next|continue|submit|forward|fwd)$")) continue;
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isPointInsideExplicitXmlDropdownControl(int x, int y)
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return false;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String clazz = node.getAttribute("class").toLowerCase(Locale.ROOT);
+                String meta = (node.getAttribute("resource-id") + " " + node.getAttribute("content-desc")).toLowerCase(Locale.ROOT);
+                boolean dropdownControl = isDropdownClassOrId(node)
+                        || clazz.contains("spinner")
+                        || clazz.contains("autocomplete")
+                        || clazz.contains("edittext")
+                        || clazz.contains("checkedtextview")
+                        || meta.contains("arrow_drop_down")
+                        || meta.contains("keyboard_arrow_down")
+                        || meta.contains("expand_more")
+                        || meta.contains("chevron_down")
+                        || meta.contains("caret_down");
+                if (!dropdownControl) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+                r.inset(-36, -28);
+                if (r.contains(x, y)) return true;
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return false;
+    }
+
+    private boolean isStandaloneNextArrowOcrText(String rawText)
+    {
+        if (rawText == null) return false;
+        String compact = rawText.trim().replaceAll("\\s+", "");
+        return compact.equals(">")
+                || compact.equals(">>")
+                || compact.equals(">>>")
+                || compact.equals("->")
+                || compact.equals("=>")
+                || compact.equals("\u203A")
+                || compact.equals("\u00BB")
+                || compact.equals("\u2192")
+                || compact.equals("\u27A1")
+                || compact.equals("\u21D2")
+                || compact.equals("\u226B")
+                || compact.equals("\uFF1E");
+    }
+
+    private int getClickButtonOcrMatchScore(HSQTools.TextBlock block, String targetNorm, boolean isArrow, boolean isNextIntent, boolean isAgreeOnlyTarget, List<HSQTools.TextBlock> allBlocks)
     {
         if (block == null || block.y <= 180 || block.text == null) return Integer.MIN_VALUE;
 
         String rawText = block.text.trim();
         String cleanText = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawText));
         if (rawText.isEmpty()) return Integer.MIN_VALUE;
+        if (isNextIntent && isLikelyDropdownChevronOcr(block, allBlocks)) return Integer.MIN_VALUE;
 
         if (isNextIntent && !isAgreeOnlyTarget && isConsentChoiceOnly(cleanText)) return Integer.MIN_VALUE;
 
@@ -7962,9 +9598,14 @@ public class StartAuto extends HSQService
             if (rawText.contains("'") || rawText.contains("\"") || rawText.contains("‘") || rawText.contains("’")) return Integer.MIN_VALUE;
             if (block.y < heightOfScreen * 0.2) return Integer.MIN_VALUE;
 
-            if (rawText.equals(">") || rawText.equals(">>") || rawText.equals("->") || rawText.equals("=>") || rawText.contains("→"))
+            boolean directNavigationToken = isStandaloneNextArrowOcrText(rawText)
+                    || cleanText.matches("^(continue|next|submit|ketiep|tieptuc|tieptheo|tiepthe|done|gui|send|batdau|forward|fwd)$");
+            if (directNavigationToken && isPointInsideExplicitXmlDropdownControl(block.x, block.y))
+                return Integer.MIN_VALUE;
+
+            if (isStandaloneNextArrowOcrText(rawText))
                 return 100000 + block.y;
-            if (cleanText.matches("^(continue|next|submit|tieptuc|tieptheo|tiepthe|trangtieptheo|tieptheo>|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|>|>>|>>>|gotonextquestion|fwd|forward|tiep|arrowright)$"))
+            if (cleanText.matches("^(continue|next|submit|ketiep|tieptuc|tieptheo|tiepthe|trangtieptheo|tieptheo>|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|>|>>|>>>|gotonextquestion|fwd|forward|tiep|arrowright)$"))
                 return 90000 + block.y;
         }
 
@@ -7972,7 +9613,9 @@ public class StartAuto extends HSQService
 
         if (isArrow)
         {
-            if (rawText.equals(targetNorm) || rawText.contains(targetNorm)) return 80000 + block.y;
+            if (isStandaloneNextArrowOcrText(rawText)
+                    && (rawText.equals(targetNorm) || rawText.contains(targetNorm) || targetNorm.contains(rawText)))
+                return 80000 + block.y;
             return Integer.MIN_VALUE;
         }
 
@@ -8019,16 +9662,166 @@ public class StartAuto extends HSQService
         return HSQTools.levenshtein(cleanText, targetNorm) <= maxDist;
     }
 
-    private boolean tryClickGreenFooterNextButton(String step, List<HSQTools.TextBlock> smartList, int slVuot)
+    private boolean hasXmlAncestorClass(org.w3c.dom.Element node, String classToken)
     {
-        android.graphics.Point p = findGreenFooterNextButtonPoint();
-        if (p == null) return false;
+        if (node == null || classToken == null || classToken.isEmpty()) return false;
+        String token = classToken.toLowerCase(Locale.ROOT);
+        org.w3c.dom.Node current = node.getParentNode();
+        while (current instanceof org.w3c.dom.Element)
+        {
+            String clazz = ((org.w3c.dom.Element) current).getAttribute("class").toLowerCase(Locale.ROOT);
+            if (clazz.contains(token)) return true;
+            current = current.getParentNode();
+        }
+        return false;
+    }
 
-        updateNotificationContent("Visual Next xanh: bam tai " + p.x + "," + p.y);
+    private android.graphics.Rect findNearestCompactXmlParentRect(org.w3c.dom.Element node, android.graphics.Rect childRect)
+    {
+        if (node == null || childRect == null) return null;
+        org.w3c.dom.Node current = node.getParentNode();
+        while (current instanceof org.w3c.dom.Element)
+        {
+            org.w3c.dom.Element element = (org.w3c.dom.Element) current;
+            String clazz = element.getAttribute("class").toLowerCase(Locale.ROOT);
+            if (clazz.contains("webview")) return null;
+
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(element.getAttribute("bounds"));
+            if (r != null && r.width() > 0 && r.height() > 0
+                    && (r.width() > childRect.width() + 16 || r.height() > childRect.height() + 16))
+            {
+                return r;
+            }
+            current = current.getParentNode();
+        }
+        return null;
+    }
+
+    private boolean hasLikelyDropdownValueLeftOfRect(android.graphics.Rect rect, List<HSQTools.TextBlock> blocks)
+    {
+        if (rect == null || blocks == null) return false;
+        for (HSQTools.TextBlock block : blocks)
+        {
+            if (block == null || block.text == null) continue;
+            int dx = rect.centerX() - block.x;
+            if (dx < 45 || dx > widthOfScreen * 0.72f || Math.abs(block.y - rect.centerY()) > 80) continue;
+
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(block.text));
+            if (clean.isEmpty() || clean.length() > 60) continue;
+            if (clean.matches("^(back|quaylai|ketiep|tieptheo|tiepthe|tieptuc|next|continue|submit|forward|fwd)$")) continue;
+            return true;
+        }
+        return false;
+    }
+
+    private android.graphics.Rect findDynamicBottomCtaButtonFromXml(List<HSQTools.TextBlock> smartList)
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return null;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            android.graphics.Rect best = null;
+            int bestScore = Integer.MIN_VALUE;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                if ("false".equals(node.getAttribute("enabled"))) continue;
+
+                String clazz = node.getAttribute("class").toLowerCase(Locale.ROOT);
+                if (!clazz.contains("button") && !clazz.contains("imagebutton")) continue;
+                if (clazz.contains("radiobutton")
+                        || clazz.contains("checkbox")
+                        || clazz.contains("togglebutton")
+                        || clazz.contains("compoundbutton")) continue;
+                if (!"true".equals(node.getAttribute("clickable"))
+                        && !"true".equals(node.getAttribute("focusable"))) continue;
+                if (!hasXmlAncestorClass(node, "webview")) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() < 64 || r.height() < 52 || r.width() > widthOfScreen * 0.78f || r.height() > 520)
+                    continue;
+                if (r.centerY() < heightOfScreen * 0.48f || r.centerY() >= heightOfScreen - 40) continue;
+                if (isXmlDropdownNavigationTrap(nodes, node, r)) continue;
+                if (isLikelyFloatingScrollTopControl(r,
+                        node.getAttribute("text") + " " + node.getAttribute("content-desc") + " " + node.getAttribute("resource-id") + " " + clazz,
+                        smartList)) continue;
+
+                String raw = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+                String resId = node.getAttribute("resource-id");
+                boolean explicitNavigation = isForwardNavigationResourceId(resId) || isNextNavigationText(raw, clean);
+                boolean emptyDynamicButton = raw.isEmpty() && (resId == null || resId.trim().isEmpty());
+                if (!explicitNavigation && !emptyDynamicButton) continue;
+
+                if (emptyDynamicButton)
+                {
+                    int minSide = Math.min(r.width(), r.height());
+                    int maxSide = Math.max(r.width(), r.height());
+                    boolean compactShape = minSide >= 72
+                            && maxSide <= 520
+                            && ((float) maxSide / Math.max(1, minSide)) <= 3.0f;
+                    if (!compactShape || hasLikelyDropdownValueLeftOfRect(r, smartList)) continue;
+
+                    android.graphics.Rect parentRect = findNearestCompactXmlParentRect(node, r);
+                    if (parentRect != null)
+                    {
+                        int maxParentWidth = Math.max((int) (r.width() * 2.5f), (int) (widthOfScreen * 0.42f));
+                        int maxParentHeight = Math.max((int) (r.height() * 2.2f), 320);
+                        if (parentRect.width() > maxParentWidth || parentRect.height() > maxParentHeight) continue;
+                    }
+                }
+
+                int score = r.centerY();
+                if (explicitNavigation) score += 12000;
+                if (emptyDynamicButton) score += 7000;
+                if (clazz.contains("button")) score += 2500;
+                if ("true".equals(node.getAttribute("clickable"))) score += 1800;
+                score -= Math.abs(r.centerX() - widthOfScreen / 2) / 5;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = new android.graphics.Rect(r);
+                }
+            }
+            return best;
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
+    private boolean tryClickDynamicBottomCtaFromXml(String step, List<HSQTools.TextBlock> smartList, int slVuot)
+    {
+        android.graphics.Rect rect = findDynamicBottomCtaButtonFromXml(smartList);
+        if (rect == null) return false;
+
         List<HSQTools.TextBlock> beforeClick = smartList == null
                 ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
                 : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
-        click(p.x, p.y, false);
+
+        boolean semanticClicked = tryPerformAccessibilityClickForXmlNavigation("", "", rect);
+        if (semanticClicked)
+        {
+            updateNotificationContent("XML CTA dong: ACTION_CLICK tai " + rect.centerX() + "," + rect.centerY());
+        }
+        else
+        {
+            int clickX = rect.centerX();
+            int clickY = rect.centerY();
+            int bottomOverlayTop = findCurrentBottomOverlayTopFromXml();
+            if (bottomOverlayTop > rect.top && bottomOverlayTop < rect.bottom)
+            {
+                int exposedBottom = Math.min(rect.bottom, bottomOverlayTop - 4);
+                if (exposedBottom > rect.top + 4) clickY = (rect.top + exposedBottom) / 2;
+            }
+            updateNotificationContent("XML CTA dong: touch tai " + clickX + "," + clickY);
+            click(clickX, clickY, false);
+        }
 
         if (!isNextCard && !checkNextOK(beforeClick, step))
         {
@@ -8036,6 +9829,138 @@ public class StartAuto extends HSQService
             return false;
         }
         return true;
+    }
+
+    private android.graphics.Rect findClickableXmlButtonAtPoint(android.graphics.Point point)
+    {
+        if (point == null) return null;
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return null;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            android.graphics.Rect best = null;
+            long bestScore = Long.MAX_VALUE;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                if ("false".equals(node.getAttribute("enabled"))) continue;
+
+                String clazz = node.getAttribute("class").toLowerCase(Locale.ROOT);
+                boolean buttonClass = clazz.contains("button") || clazz.contains("imagebutton");
+                boolean interactive = "true".equals(node.getAttribute("clickable"))
+                        || "true".equals(node.getAttribute("focusable"));
+                if (!buttonClass || !interactive) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() < 48 || r.height() < 48 || r.width() > 720 || r.height() > 520) continue;
+                if (r.centerY() < heightOfScreen * 0.45f) continue;
+
+                android.graphics.Rect hit = new android.graphics.Rect(r);
+                hit.inset(-20, -20);
+                if (!hit.contains(point.x, point.y)) continue;
+                if (isXmlDropdownNavigationTrap(nodes, node, r)) continue;
+
+                long area = (long) r.width() * r.height();
+                long distance = Math.abs(r.centerX() - point.x) + Math.abs(r.centerY() - point.y);
+                long score = area + distance * 100L;
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = new android.graphics.Rect(r);
+                }
+            }
+            return best;
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
+    private boolean tryClickGreenFooterNextButton(String step, List<HSQTools.TextBlock> smartList, int slVuot)
+    {
+        android.graphics.Point p = findGreenFooterNextButtonPoint();
+        if (p == null) return false;
+        android.graphics.Rect xmlButtonRect = findClickableXmlButtonAtPoint(p);
+        if (xmlButtonRect == null && isLikelyDropdownVisualPoint(p, smartList))
+        {
+            updateNotificationContent("Visual Next xanh: bo qua vi nam trong/giong dropdown");
+            return false;
+        }
+
+        List<HSQTools.TextBlock> beforeClick = smartList == null
+                ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
+                : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
+
+        boolean semanticClicked = xmlButtonRect != null
+                && tryPerformAccessibilityClickForXmlNavigation("", "", xmlButtonRect);
+        if (semanticClicked)
+        {
+            updateNotificationContent("Visual Next xanh: ACTION_CLICK button tai " + xmlButtonRect.centerX() + "," + xmlButtonRect.centerY());
+        }
+        else
+        {
+            int clickX = xmlButtonRect == null ? p.x : xmlButtonRect.centerX();
+            int clickY = p.y;
+            int bottomOverlayTop = findCurrentBottomOverlayTopFromXml();
+            if (xmlButtonRect != null && bottomOverlayTop > xmlButtonRect.top && bottomOverlayTop < xmlButtonRect.bottom)
+            {
+                int exposedBottom = Math.min(xmlButtonRect.bottom, bottomOverlayTop - 4);
+                if (exposedBottom > xmlButtonRect.top + 4)
+                {
+                    clickY = (xmlButtonRect.top + exposedBottom) / 2;
+                    updateNotificationContent("Visual Next xanh: nav che nut, bam mep lo tai " + clickX + "," + clickY);
+                }
+            }
+            else
+            {
+                updateNotificationContent("Visual Next xanh: bam tai " + clickX + "," + clickY);
+            }
+            click(clickX, clickY, false);
+        }
+
+        if (!isNextCard && !checkNextOK(beforeClick, step))
+        {
+            swipeToTop(slVuot, false);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isLikelyDropdownVisualPoint(android.graphics.Point point, List<HSQTools.TextBlock> blocks)
+    {
+        if (point == null) return false;
+        if (isPointInsideExplicitXmlDropdownControl(point.x, point.y)) return true;
+        if (blocks == null) return false;
+
+        for (HSQTools.TextBlock block : blocks)
+        {
+            if (block == null || block.text == null) continue;
+            if (Math.abs(block.y - point.y) > 85 || Math.abs(block.x - point.x) > widthOfScreen * 0.38f) continue;
+
+            String raw = block.text.trim();
+            String compactRaw = raw.replaceAll("\\s+", "");
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+            if (clean.isEmpty() && compactRaw.isEmpty()) continue;
+
+            boolean navigationText = clean.matches("^(ketiep|tieptheo|tiepthe|tieptuc|next|continue|submit|done|gui|send|forward|fwd|batdau|agreeandcontinue|go|proceed|ok)$");
+            boolean navigationArrow = compactRaw.equals(">")
+                    || compactRaw.equals(">>")
+                    || compactRaw.equals(">>>")
+                    || compactRaw.equals("->")
+                    || compactRaw.equals("=>")
+                    || compactRaw.equals("\u2192")
+                    || compactRaw.equals("\u21D2")
+                    || compactRaw.equals("\u226B");
+            if (navigationText || navigationArrow) continue;
+
+            if (clean.length() <= 80) return true;
+        }
+        return false;
     }
 
     private android.graphics.Point findGreenFooterNextButtonPoint()
@@ -8053,7 +9978,7 @@ public class StartAuto extends HSQService
             int leftLimit = Math.max(0, (int) (screenW * 0.42f));
             int topLimit = Math.max(181, (int) (screenH * 0.42f));
             int rightLimit = screenW - 24;
-            int bottomLimit = Math.min(screenH - 120, (int) (screenH * 0.93f));
+            int bottomLimit = screenH - 80;
             int step = 4;
 
             int minX = Integer.MAX_VALUE;
@@ -8089,14 +10014,14 @@ public class StartAuto extends HSQService
             if (blobW > screenW * 0.58f || blobH > screenH * 0.24f) return null;
 
             float ratio = (float) blobW / Math.max(1, blobH);
-            if (ratio < 1.18f || ratio > 5.2f) return null;
+            if (ratio < 0.72f || ratio > 5.2f) return null;
 
             float coverage = (count * step * step) / (float) Math.max(1, blobW * blobH);
             if (coverage < 0.32f) return null;
 
             int centerX = (minX + maxX) / 2;
             int centerY = (minY + maxY) / 2;
-            if (centerX < screenW * 0.50f || centerY < screenH * 0.50f) return null;
+            if (centerX < screenW * 0.38f || centerY < screenH * 0.50f) return null;
 
             int whiteInside = 0;
             int innerLeft = Math.max(minX + 20, centerX - blobW / 3);
@@ -8160,6 +10085,8 @@ public class StartAuto extends HSQService
 
             android.graphics.Rect bestRect = null;
             String bestLabel = "";
+            String bestRawLabel = "";
+            String bestResourceId = "";
             boolean bestClipped = false;
             boolean bestRevealOnly = false;
             int bestScore = Integer.MIN_VALUE;
@@ -8171,6 +10098,7 @@ public class StartAuto extends HSQService
 
                 android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
                 if (r == null) continue;
+                if (isXmlDropdownNavigationTrap(nodes, node, r)) continue;
 
                 String text = node.getAttribute("text");
                 String desc = node.getAttribute("content-desc");
@@ -8187,7 +10115,8 @@ public class StartAuto extends HSQService
                 String resLower = resId == null ? "" : resId.toLowerCase(Locale.US);
                 if (resLower.contains("statusbarbackground") || resLower.contains("navigationbarbackground")) continue;
                 String clazzLower = clazz == null ? "" : clazz.toLowerCase(Locale.US);
-                boolean navId = resLower.contains("nav") || resLower.contains("next") || resLower.contains("continue") || resLower.contains("submit") || resLower.contains("nbtn");
+                boolean forwardNavId = isForwardNavigationResourceId(resId);
+                boolean navId = forwardNavId || resLower.contains("nav");
                 boolean nextText = isNextNavigationText(rawFullText, cleanFullText);
                 int visibleBottomBeforeOverlay = bottomOverlayTop > 0 ? Math.min(r.bottom, bottomOverlayTop - 8) : r.bottom;
                 int visibleHeightBeforeOverlay = Math.max(0, visibleBottomBeforeOverlay - Math.max(r.top, 181));
@@ -8197,14 +10126,15 @@ public class StartAuto extends HSQService
                 boolean clippedByXmlAncestor = ancestorVisibleHeight < 24 || r.centerY() < ancestorVisibleRect.top || r.centerY() > ancestorVisibleRect.bottom;
                 boolean revealOnly = isXmlNavRectTooClippedToClick(r, bottomOverlayTop, ancestorVisibleRect);
                 boolean clipped = revealOnly || r.height() < 24 || (r.bottom >= heightOfScreen - 80 && r.height() < 80) || r.centerY() >= heightOfScreen - 40 || clippedByBottomOverlay || clippedByXmlAncestor;
-                boolean navOnlyReveal = navId && !nextText && clipped;
-                if (!nextText && !navOnlyReveal) continue;
-
-                boolean buttonish = clazzLower.contains("button")
+                boolean directlyInteractive = clazzLower.contains("button")
                         || clazzLower.contains("image")
                         || "true".equals(clickable)
-                        || "true".equals(focusable)
-                        || navId;
+                        || "true".equals(focusable);
+                boolean semanticForwardControl = forwardNavId && directlyInteractive;
+                boolean navOnlyReveal = navId && !nextText && clipped;
+                if (!nextText && !semanticForwardControl && !navOnlyReveal) continue;
+
+                boolean buttonish = directlyInteractive || navId;
                 if (!buttonish) continue;
 
                 if (r.height() > 800) continue;
@@ -8220,9 +10150,10 @@ public class StartAuto extends HSQService
                 if (nextText) score += 5000;
                 if (clazzLower.contains("button")) score += 2500;
                 if ("true".equals(clickable)) score += 1800;
+                if (forwardNavId) score += 2200;
                 if (navId) score += 1200;
                 if (resLower.contains("nav-container") || resLower.contains("tblnav") || resLower.endsWith("navigation")) score += 1200;
-                if (cleanFullText.matches("^(tieptheo|tiepthe|xinhaytieptuc|haytieptuc|vuilongtieptuc|next|continue|submit|trangtieptheo|batdau|dongyvabatdau|agreeandcontinue)$")) score += 1800;
+                if (cleanFullText.matches("^(ketiep|tieptheo|tiepthe|xinhaytieptuc|haytieptuc|vuilongtieptuc|next|continue|submit|trangtieptheo|batdau|dongyvabatdau|agreeandcontinue)$")) score += 1800;
                 if (r.centerX() > widthOfScreen / 2) score += 500;
                 if (clipped) score += 700;
 
@@ -8231,6 +10162,8 @@ public class StartAuto extends HSQService
                     bestScore = score;
                     bestRect = r;
                     bestLabel = rawFullText.isEmpty() ? resId : rawFullText;
+                    bestRawLabel = rawFullText;
+                    bestResourceId = resId;
                     bestClipped = clipped;
                     bestRevealOnly = revealOnly;
                 }
@@ -8283,7 +10216,15 @@ public class StartAuto extends HSQService
             List<HSQTools.TextBlock> beforeClick = smartList == null
                     ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
                     : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
-            click(clickX, clickY, false);
+            boolean semanticClicked = tryPerformAccessibilityClickForXmlNavigation(bestResourceId, bestRawLabel, bestRect);
+            if (semanticClicked)
+            {
+                updateNotificationContent("XML Nav: ACTION_CLICK nut [" + bestLabel + "]");
+            }
+            else
+            {
+                click(clickX, clickY, false);
+            }
 
             if(!isNextCard)
             {
@@ -8307,6 +10248,115 @@ public class StartAuto extends HSQService
         }
     }
 
+    private boolean tryPerformAccessibilityClickForXmlNavigation(String expectedResourceId, String expectedRawLabel, android.graphics.Rect expectedBounds)
+    {
+        AccessibilityNodeInfo root = null;
+        try
+        {
+            if (ASBLBridgeService.asblService == null || expectedBounds == null) return false;
+            root = ASBLBridgeService.asblService.getRootInActiveWindow();
+            if (root == null) return false;
+
+            String expectedCleanLabel = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(expectedRawLabel == null ? "" : expectedRawLabel));
+            return performAccessibilityClickForXmlNavigation(root, expectedResourceId, expectedCleanLabel, expectedBounds);
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (root != null) root.recycle();
+            }
+            catch (Exception ignored) {}
+        }
+    }
+
+    private boolean performAccessibilityClickForXmlNavigation(AccessibilityNodeInfo node, String expectedResourceId, String expectedCleanLabel, android.graphics.Rect expectedBounds)
+    {
+        if (node == null) return false;
+
+        try
+        {
+            if (node.isEnabled() && node.isVisibleToUser())
+            {
+                String actualResourceId = node.getViewIdResourceName();
+                String actualRawLabel = ((node.getText() == null ? "" : node.getText().toString()) + " "
+                        + (node.getContentDescription() == null ? "" : node.getContentDescription().toString())).trim();
+                String actualCleanLabel = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(actualRawLabel));
+                String actualClass = node.getClassName() == null ? "" : node.getClassName().toString().toLowerCase(Locale.ROOT);
+                android.graphics.Rect actualBounds = new android.graphics.Rect();
+                node.getBoundsInScreen(actualBounds);
+
+                boolean resourceMatches = sameAccessibilityResourceId(actualResourceId, expectedResourceId);
+                boolean labelMatches = !expectedCleanLabel.isEmpty() && expectedCleanLabel.equals(actualCleanLabel);
+                boolean boundsMatch = Math.abs(actualBounds.centerX() - expectedBounds.centerX()) <= 160
+                        && Math.abs(actualBounds.centerY() - expectedBounds.centerY()) <= 160
+                        && actualBounds.width() >= 24 && actualBounds.height() >= 24;
+                boolean supportsClick = node.isClickable()
+                        || (node.getActions() & AccessibilityNodeInfo.ACTION_CLICK) == AccessibilityNodeInfo.ACTION_CLICK;
+                boolean semanticExpectationEmpty = (expectedResourceId == null || expectedResourceId.trim().isEmpty())
+                        && (expectedCleanLabel == null || expectedCleanLabel.isEmpty());
+                boolean exactBoundsButtonMatch = semanticExpectationEmpty
+                        && actualClass.contains("button")
+                        && Math.abs(actualBounds.left - expectedBounds.left) <= 36
+                        && Math.abs(actualBounds.top - expectedBounds.top) <= 36
+                        && Math.abs(actualBounds.right - expectedBounds.right) <= 36
+                        && Math.abs(actualBounds.bottom - expectedBounds.bottom) <= 36
+                        && actualBounds.width() >= 48
+                        && actualBounds.height() >= 48;
+
+                if (supportsClick && (resourceMatches || (labelMatches && boundsMatch) || exactBoundsButtonMatch)
+                        && node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                {
+                    return true;
+                }
+            }
+
+            for (int i = 0; i < node.getChildCount(); i++)
+            {
+                AccessibilityNodeInfo child = null;
+                try
+                {
+                    child = node.getChild(i);
+                    if (child != null && performAccessibilityClickForXmlNavigation(child, expectedResourceId, expectedCleanLabel, expectedBounds))
+                    {
+                        return true;
+                    }
+                }
+                finally
+                {
+                    try
+                    {
+                        if (child != null) child.recycle();
+                    }
+                    catch (Exception ignored) {}
+                }
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return false;
+    }
+
+    private boolean sameAccessibilityResourceId(String actualResourceId, String expectedResourceId)
+    {
+        if (actualResourceId == null || expectedResourceId == null) return false;
+        String actual = actualResourceId.trim();
+        String expected = expectedResourceId.trim();
+        if (actual.isEmpty() || expected.isEmpty()) return false;
+        if (actual.equals(expected)) return true;
+
+        int actualSlash = actual.lastIndexOf('/');
+        int expectedSlash = expected.lastIndexOf('/');
+        String actualLeaf = actualSlash >= 0 ? actual.substring(actualSlash + 1) : actual;
+        String expectedLeaf = expectedSlash >= 0 ? expected.substring(expectedSlash + 1) : expected;
+        return actualLeaf.equals(expectedLeaf);
+    }
+
     private boolean tryClickITileNextButtonFromXml(String step, List<HSQTools.TextBlock> smartList, int slVuot)
     {
         try
@@ -8321,6 +10371,8 @@ public class StartAuto extends HSQService
 
             android.graphics.Rect bestRect = null;
             String bestLabel = "";
+            String bestRawText = "";
+            String bestResourceId = "";
             int bestScore = Integer.MIN_VALUE;
 
             for (int i = 0; i < nodes.getLength(); i++)
@@ -8354,6 +10406,8 @@ public class StartAuto extends HSQService
                     bestScore = score;
                     bestRect = r;
                     bestLabel = resId == null || resId.isEmpty() ? rawText : resId;
+                    bestRawText = rawText;
+                    bestResourceId = resId;
                 }
             }
 
@@ -8364,10 +10418,24 @@ public class StartAuto extends HSQService
                     ? getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList())
                     : smartList.stream().filter(x -> x.y > 180).collect(Collectors.toList());
 
+            boolean semanticClicked = tryPerformAccessibilityClickForXmlNavigation(bestResourceId, bestRawText, bestRect);
+            if (semanticClicked)
+            {
+                updateNotificationContent("iTile Next: ACTION_CLICK [" + bestLabel + "]");
+                if (didNavigationChangeQuick(beforeSignature, beforeClick))
+                {
+                    tryNextAgain = 0;
+                    return true;
+                }
+
+                beforeSignature = getSmartScrollXmlSignature();
+                beforeClick = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+            }
+
             int[][] points = new int[][]{
                     {bestRect.centerX(), bestRect.centerY()},
                     {bestRect.left + Math.max(24, bestRect.width() / 3), bestRect.centerY()},
-                    {bestRect.left + Math.max(24, bestRect.width() / 2), bestRect.top + Math.max(24, bestRect.height() / 2)}
+                    {bestRect.right - Math.max(24, bestRect.width() / 3), bestRect.centerY()}
             };
 
             for (int i = 0; i < points.length; i++)
@@ -8396,33 +10464,49 @@ public class StartAuto extends HSQService
     {
         if (smartList == null || smartList.isEmpty()) return false;
 
+        int cookieOverlayTop = findCurrentCookieOverlayTopFromXml();
+        if (cookieOverlayTop < 0)
+        {
+            cookieOverlayTop = findLikelyCookieOverlayTopFromBlocks(smartList);
+        }
         HSQTools.TextBlock best = null;
         int bestScore = Integer.MIN_VALUE;
 
         for (HSQTools.TextBlock block : smartList)
         {
             if (block == null || block.text == null) continue;
-            if (block.y < heightOfScreen * 0.48f || block.y > heightOfScreen - 170) continue;
+            if (block.y < heightOfScreen * 0.25f || block.y > heightOfScreen - 170) continue;
 
             String raw = block.text.trim();
             String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
             if (clean.isEmpty()) continue;
             if (clean.contains("accessibility") || clean.contains("standard") || clean.contains("compliant")) continue;
 
-            boolean exactNext = clean.matches("^(tieptheo|tiepthe|tieptuc|next|continue|submit|batdau|start|dongyvabatdau|agreeandcontinue)$");
+            boolean exactNext = clean.matches("^(ketiep|tieptheo|tiepthe|tieptuc|next|continue|submit|batdau|start|dongyvabatdau|agreeandcontinue)$");
             boolean shortNext = clean.length() <= 30
-                    && (clean.contains("tieptheo")
+                    && (clean.contains("ketiep")
+                    || clean.contains("tieptheo")
                     || clean.contains("tiepthe")
                     || clean.contains("tieptuc")
                     || clean.contains("next")
                     || clean.contains("continue")
                     || clean.contains("submit"));
-            if (!exactNext && !shortNext) continue;
+            boolean cookieClippedNext = cookieOverlayTop > 0
+                    && block.y >= cookieOverlayTop - 240
+                    && block.y <= cookieOverlayTop + 80
+                    && clean.length() >= 4
+                    && ("tieptuc".startsWith(clean)
+                    || "tieptheo".startsWith(clean)
+                    || "continue".startsWith(clean)
+                    || "next".startsWith(clean));
+            if (!exactNext && !shortNext && !cookieClippedNext) continue;
+            if (isPointInsideExplicitXmlDropdownControl(block.x, block.y)) continue;
 
             if (isLikelyNextInstructionText(block, smartList)) continue;
 
             int score = block.y;
             if (exactNext) score += 5000;
+            if (cookieClippedNext) score += 4500;
             if (block.x > widthOfScreen * 0.25f && block.x < widthOfScreen * 0.75f) score += 1200;
             if (hasLikelyAccessibilityFooterBelow(block, smartList)) score += 900;
             score -= Math.abs(block.x - widthOfScreen / 2) / 4;
@@ -8441,8 +10525,17 @@ public class StartAuto extends HSQService
                 .filter(x -> x != null && x.y > 180)
                 .collect(Collectors.toList());
 
-        updateNotificationContent("OCR Next visible: bam [" + best.text + "] tai " + best.x + "," + best.y);
-        click(best.x, best.y, false);
+        int clickY = best.y;
+        if (cookieOverlayTop > 0 && clickY >= cookieOverlayTop - 90)
+        {
+            clickY = Math.max(181, cookieOverlayTop - Math.max(55, (int) (heightOfScreen * 0.022f)));
+            updateNotificationContent("OCR Next bi cookie che: bam phan con lo tai " + best.x + "," + clickY);
+        }
+        else
+        {
+            updateNotificationContent("OCR Next visible: bam [" + best.text + "] tai " + best.x + "," + clickY);
+        }
+        click(best.x, clickY, false);
 
         if (didNavigationChangeQuick(beforeSignature, beforeClick))
         {
@@ -8491,6 +10584,14 @@ public class StartAuto extends HSQService
     private boolean didNavigationChangeQuick(String beforeSignature, List<HSQTools.TextBlock> beforeClick)
     {
         delay(2200);
+        int validationState = handleProfileBackedInputValidationFromXml();
+        if (validationState != 0)
+        {
+            updateNotificationContent(validationState == 2
+                    ? "Quick Next: validator xuat hien, da sua input"
+                    : "Quick Next: XML doi do validation, khong phai chuyen trang");
+            return false;
+        }
         String afterSignature = getSmartScrollXmlSignature();
         if (beforeSignature != null && !beforeSignature.isEmpty() && afterSignature != null && !afterSignature.isEmpty() && !beforeSignature.equals(afterSignature))
         {
@@ -8568,8 +10669,30 @@ public class StartAuto extends HSQService
         String rawLower = rawFullText == null ? "" : rawFullText.toLowerCase(Locale.US).replaceAll("\\s+", "");
         if (containsNextArrowGlyph(rawLower)) return true;
         if (cleanFullText == null) cleanFullText = "";
-        if (cleanFullText.matches("^(continue|next|submit|tieptuc|tieptheo|tiepthe|xinhaytieptuc|haytieptuc|vuilongtieptuc|trangtieptheo|tieptheotrang|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|gotonextquestion|fwd|forward|tiep|arrowright)$")) return true;
-        return cleanFullText.length() <= 80 && (cleanFullText.contains("tieptuc") || cleanFullText.contains("tieptheo") || cleanFullText.contains("tiepthe") || cleanFullText.contains("next") || cleanFullText.contains("continue") || cleanFullText.contains("submit") || cleanFullText.contains("batdau"));
+        if (cleanFullText.matches("^(continue|next|submit|ketiep|tieptuc|tieptheo|tiepthe|xinhaytieptuc|haytieptuc|vuilongtieptuc|trangtieptheo|tieptheotrang|done|gui|send|batdau|agreeandcontinue|dongyvabatdau|gotonextquestion|fwd|forward|tiep|arrowright)$")) return true;
+        return cleanFullText.length() <= 80 && (cleanFullText.contains("ketiep") || cleanFullText.contains("tieptuc") || cleanFullText.contains("tieptheo") || cleanFullText.contains("tiepthe") || cleanFullText.contains("next") || cleanFullText.contains("continue") || cleanFullText.contains("submit") || cleanFullText.contains("batdau"));
+    }
+
+    private boolean isForwardNavigationResourceId(String resourceId)
+    {
+        if (resourceId == null || resourceId.trim().isEmpty()) return false;
+
+        String lower = resourceId.toLowerCase(Locale.US);
+        int slash = lower.lastIndexOf('/');
+        String leaf = slash >= 0 ? lower.substring(slash + 1) : lower;
+        String compact = leaf.replaceAll("[^a-z0-9]+", "");
+        boolean shortNextButtonId = compact.equals("nbtn")
+                || leaf.contains("_nbtn")
+                || leaf.contains("-nbtn");
+
+        if (compact.contains("next") || compact.contains("continue") || compact.contains("submit")) return true;
+        if (compact.contains("navright") || compact.contains("rightnav") || shortNextButtonId) return true;
+
+        return compact.equals("forward")
+                || compact.contains("forwardbutton")
+                || compact.contains("buttonforward")
+                || compact.contains("forwardbtn")
+                || compact.contains("btnforward");
     }
 
     private boolean containsNextArrowGlyph(String rawText)
@@ -8621,7 +10744,8 @@ public class StartAuto extends HSQService
                 if (block.x >= r.centerX() - 50) continue;
                 if (block.y < r.top - 160 || block.y > r.bottom + 160) continue;
                 String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(block.text));
-                if (clean.matches("^(tieptheo|tiepthe|tieptuc|next|continue|submit|trangtieptheo)$")
+                if (clean.matches("^(ketiep|tieptheo|tiepthe|tieptuc|next|continue|submit|trangtieptheo)$")
+                        || clean.contains("ketiep")
                         || clean.contains("tiepthe")
                         || clean.contains("tieptuc"))
                 {
@@ -8648,7 +10772,6 @@ public class StartAuto extends HSQService
             org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
             android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
             if (r == null) continue;
-            if (r.top < heightOfScreen * 0.55 || r.width() < widthOfScreen * 0.55 || r.height() < 50) continue;
 
             String text = node.getAttribute("text");
             String desc = node.getAttribute("content-desc");
@@ -8662,14 +10785,108 @@ public class StartAuto extends HSQService
 
             boolean bottomNavText = clean.contains("home") && clean.contains("surveys") && clean.contains("menu");
             boolean bottomNavMeta = raw.contains("bottomnavigation") || raw.contains("bottom_nav") || raw.contains("bottomnav") || raw.contains("tablayout");
+            boolean materialBottomNavigation = raw.contains("navigationview")
+                    && !raw.contains("webview")
+                    && r.top >= heightOfScreen * 0.70f
+                    && r.bottom >= heightOfScreen - 120;
             boolean androidNavBar = raw.contains("navigationbarbackground");
-            if (bottomNavText || bottomNavMeta || androidNavBar)
+            boolean cookieText = raw.contains("_evidon_banner")
+                    || raw.contains("cookie notice banner")
+                    || clean.contains("evidonbanner")
+                    || clean.contains("cookienoticebanner")
+                    || clean.contains("aboutcookiesonthissite")
+                    || clean.contains("cookiesonthissite")
+                    || (clean.contains("cookienotice") && (clean.contains("cookie") || clean.contains("cookies")));
+            boolean cookieSheet = cookieText
+                    && r.top >= heightOfScreen * 0.25f
+                    && r.top < heightOfScreen * 0.80f
+                    && r.bottom >= heightOfScreen * 0.78f
+                    && r.width() >= widthOfScreen * 0.65f
+                    && r.height() >= heightOfScreen * 0.18f;
+            boolean regularBottomOverlay = r.top >= heightOfScreen * 0.55f
+                    && r.width() >= widthOfScreen * 0.55f
+                    && r.height() >= 50
+                    && (bottomNavText || bottomNavMeta || materialBottomNavigation || androidNavBar);
+            if (cookieSheet || regularBottomOverlay)
             {
                 bestTop = Math.min(bestTop, r.top);
             }
         }
 
         return bestTop == Integer.MAX_VALUE ? -1 : bestTop;
+    }
+
+    private int findCurrentBottomOverlayTopFromXml()
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return -1;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            return findLikelyBottomOverlayTop(doc.getElementsByTagName("node"));
+        }
+        catch (Exception ignored)
+        {
+            return -1;
+        }
+    }
+
+    private int findCurrentCookieOverlayTopFromXml()
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return -1;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            int bestTop = Integer.MAX_VALUE;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() < widthOfScreen * 0.65f || r.height() < heightOfScreen * 0.18f) continue;
+
+                String raw = (node.getAttribute("resource-id") + " " + node.getAttribute("text") + " "
+                        + node.getAttribute("content-desc") + " " + node.getAttribute("class")).toLowerCase(Locale.US);
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+                boolean cookieBanner = raw.contains("_evidon_banner")
+                        || raw.contains("cookie notice banner")
+                        || clean.contains("evidonbanner")
+                        || clean.contains("cookienoticebanner");
+                if (cookieBanner && r.top >= heightOfScreen * 0.25f && r.bottom >= heightOfScreen * 0.78f)
+                {
+                    bestTop = Math.min(bestTop, r.top);
+                }
+            }
+            return bestTop == Integer.MAX_VALUE ? -1 : bestTop;
+        }
+        catch (Exception ignored)
+        {
+            return -1;
+        }
+    }
+
+    private int findLikelyCookieOverlayTopFromBlocks(List<? extends HSQTools.TextBlock> blocks)
+    {
+        if (blocks == null || blocks.isEmpty()) return -1;
+
+        int titleY = Integer.MAX_VALUE;
+        for (HSQTools.TextBlock block : blocks)
+        {
+            if (block == null || block.text == null || block.y <= 180) continue;
+            String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(block.text));
+            if (clean.contains("aboutcookiesonthissite") || clean.contains("cookiesonthissite"))
+            {
+                titleY = Math.min(titleY, block.y);
+            }
+        }
+
+        if (titleY == Integer.MAX_VALUE) return -1;
+        int titleOffset = Math.max(100, (int) (heightOfScreen * 0.050f));
+        return Math.max(181, titleY - titleOffset);
     }
 
     private int getVisibleClickYAvoidingBottomOverlay(android.graphics.Rect r, int bottomOverlayTop)
@@ -8896,7 +11113,329 @@ public class StartAuto extends HSQService
     private boolean isDropdownNavigationButtonText(String clean)
     {
         if (clean == null || clean.isEmpty()) return false;
-        return clean.matches("^(back|next|previous|continue|submit|done|finish|start|tiep|tieptuc|tieptheo|quaylai|trove|lui|dongy|batdau)$");
+        return clean.matches("^(back|next|previous|continue|submit|done|finish|start|tiep|ketiep|tieptuc|tieptheo|quaylai|trove|lui|dongy|batdau)$");
+    }
+
+    private static class InlineDropdownAccordionTarget
+    {
+        android.graphics.Rect controlRect;
+        android.graphics.Rect arrowRect;
+        int visibleChoiceRows;
+        int ghostChoiceRows;
+
+        InlineDropdownAccordionTarget(android.graphics.Rect controlRect, android.graphics.Rect arrowRect,
+                                      int visibleChoiceRows, int ghostChoiceRows)
+        {
+            this.controlRect = controlRect;
+            this.arrowRect = arrowRect;
+            this.visibleChoiceRows = visibleChoiceRows;
+            this.ghostChoiceRows = ghostChoiceRows;
+        }
+    }
+
+    private int tryOpenInlineDropdownAccordion(String contextStr, HSQTools.TextBlock anchor)
+    {
+        InlineDropdownAccordionTarget target = findInlineDropdownAccordionTarget(contextStr, anchor);
+        if (target == null) return 0;
+
+        if (target.visibleChoiceRows >= 2)
+        {
+            updateNotificationContent("Dropdown accordion da mo, khong toggle lai");
+            return 1;
+        }
+
+        if (target.ghostChoiceRows < 3) return 0;
+
+        boolean semanticClicked = tryPerformAccessibilityClickForExactBounds(target.controlRect);
+        if (semanticClicked)
+        {
+            updateNotificationContent("Dropdown accordion ACTION_CLICK header tai "
+                    + target.controlRect.centerX() + "," + target.controlRect.centerY());
+        }
+        else
+        {
+            android.graphics.Rect clickRect = target.arrowRect == null ? target.controlRect : target.arrowRect;
+            updateNotificationContent("Dropdown accordion touch header tai "
+                    + clickRect.centerX() + "," + clickRect.centerY());
+            click(clickRect.centerX(), clickRect.centerY(), false);
+        }
+
+        // Accessibility cua WebView co the leak san tat ca option du dang collapsed,
+        // nen tuyet doi khong bam lan hai chi vi node/OCR khong doi.
+        delay(2500);
+        return 1;
+    }
+
+    private InlineDropdownAccordionTarget findInlineDropdownAccordionTarget(String contextStr, HSQTools.TextBlock anchor)
+    {
+        String targetNorm = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(contextStr == null ? "" : contextStr));
+        if (targetNorm.length() < 4) return null;
+
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return null;
+
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            org.w3c.dom.Element bestLabelNode = null;
+            android.graphics.Rect bestLabelRect = null;
+            long bestLabelScore = Long.MAX_VALUE;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String raw = ((node.getAttribute("text") == null ? "" : node.getAttribute("text")) + " "
+                        + (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).trim();
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+                if (!isDropdownTargetTextMatch(clean, targetNorm)) continue;
+
+                android.graphics.Rect rawRect = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, rawRect);
+                if (!isXmlRectUsablyVisible(visibleRect)) continue;
+
+                long area = (long) visibleRect.width() * visibleRect.height();
+                long distance = anchor == null ? 0L
+                        : Math.abs(visibleRect.centerX() - anchor.x) + Math.abs(visibleRect.centerY() - anchor.y);
+                long score = area + distance * 1000L;
+                if (score < bestLabelScore)
+                {
+                    bestLabelScore = score;
+                    bestLabelNode = node;
+                    bestLabelRect = new android.graphics.Rect(visibleRect);
+                }
+            }
+            if (bestLabelNode == null || bestLabelRect == null) return null;
+
+            org.w3c.dom.Element bestControlNode = null;
+            android.graphics.Rect bestControlRect = null;
+            long bestControlArea = Long.MAX_VALUE;
+            int maxAccordionHeaderHeight = Math.max(360, Math.min(560, (int) (heightOfScreen * 0.18f)));
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                if ("false".equals(node.getAttribute("enabled"))) continue;
+                boolean interactive = "true".equals(node.getAttribute("clickable"))
+                        || "true".equals(node.getAttribute("focusable"));
+                if (!interactive || isChoiceControlNode(node)) continue;
+
+                android.graphics.Rect rawRect = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, rawRect);
+                if (!isXmlRectUsablyVisible(visibleRect)) continue;
+                if (visibleRect.width() < widthOfScreen * 0.70f) continue;
+                if (visibleRect.height() < 80 || visibleRect.height() > maxAccordionHeaderHeight) continue;
+                if (!visibleRect.contains(bestLabelRect.centerX(), bestLabelRect.centerY())) continue;
+
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(
+                        node.getAttribute("text") + " " + node.getAttribute("content-desc")));
+                if (isDropdownNavigationButtonText(clean)) continue;
+
+                long area = (long) visibleRect.width() * visibleRect.height();
+                if (area < bestControlArea)
+                {
+                    bestControlArea = area;
+                    bestControlNode = node;
+                    bestControlRect = new android.graphics.Rect(visibleRect);
+                }
+            }
+            if (bestControlNode == null || bestControlRect == null) return null;
+
+            android.graphics.Rect arrowRect = null;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String clazz = node.getAttribute("class") == null ? "" : node.getAttribute("class").toLowerCase(Locale.ROOT);
+                if (!clazz.contains("image")) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+                if (!isXmlRectUsablyVisible(visibleRect)) continue;
+                if (!bestControlRect.contains(visibleRect.centerX(), visibleRect.centerY())) continue;
+                if (visibleRect.centerX() < bestControlRect.left + bestControlRect.width() * 0.65f) continue;
+                if (visibleRect.width() > 180 || visibleRect.height() > 180) continue;
+                arrowRect = new android.graphics.Rect(visibleRect);
+                break;
+            }
+            if (arrowRect == null) return null;
+
+            org.w3c.dom.Node ancestor = bestControlNode.getParentNode();
+            while (ancestor instanceof org.w3c.dom.Element)
+            {
+                org.w3c.dom.Element host = (org.w3c.dom.Element) ancestor;
+                android.graphics.Rect hostRect = HSQTools.parseBoundsFromXml(host.getAttribute("bounds"));
+                if (hostRect != null && hostRect.width() >= bestControlRect.width() * 0.75f
+                        && hostRect.contains(bestControlRect.centerX(), bestControlRect.centerY()))
+                {
+                    int visibleRows = 0;
+                    int ghostRows = 0;
+                    java.util.List<Integer> uniqueRowYs = new ArrayList<>();
+                    java.util.List<android.graphics.Rect> choiceRowRects = new ArrayList<>();
+                    org.w3c.dom.NodeList descendants = host.getElementsByTagName("node");
+
+                    for (int i = 0; i < descendants.getLength(); i++)
+                    {
+                        org.w3c.dom.Element row = (org.w3c.dom.Element) descendants.item(i);
+                        if (row == bestControlNode || "false".equals(row.getAttribute("enabled"))) continue;
+                        boolean rowInteractive = "true".equals(row.getAttribute("clickable"))
+                                || "true".equals(row.getAttribute("focusable"));
+                        if (!rowInteractive || isChoiceControlNode(row)) continue;
+
+                        android.graphics.Rect rowRect = HSQTools.parseBoundsFromXml(row.getAttribute("bounds"));
+                        if (rowRect == null || rowRect.width() < widthOfScreen * 0.60f) continue;
+                        if (rowRect.height() < 55 || rowRect.height() > 360) continue;
+                        if (rowRect.top < bestControlRect.bottom - 16) continue;
+
+                        boolean duplicate = false;
+                        for (Integer oldY : uniqueRowYs)
+                        {
+                            if (Math.abs(oldY - rowRect.centerY()) < 28)
+                            {
+                                duplicate = true;
+                                break;
+                            }
+                        }
+                        if (duplicate) continue;
+                        uniqueRowYs.add(rowRect.centerY());
+                        choiceRowRects.add(new android.graphics.Rect(rowRect));
+
+                        android.graphics.Rect visibleRow = getXmlClippedVisibleRect(row, rowRect);
+                        if (isXmlRectUsablyVisible(visibleRow)
+                                && visibleRow.centerY() > bestControlRect.bottom + 12)
+                        {
+                            visibleRows++;
+                        }
+                        else if (rowRect.bottom > hostRect.bottom + 8)
+                        {
+                            ghostRows++;
+                        }
+                    }
+
+                    visibleRows = Math.max(visibleRows, countRawOcrBlocksInsideAccordionRows(choiceRowRects));
+
+                    String hostMeta = (host.getAttribute("resource-id") + " " + host.getAttribute("class")).toLowerCase(Locale.ROOT);
+                    boolean accordionHint = hostMeta.contains("accordion")
+                            || hostMeta.contains("qarts")
+                            || hostMeta.contains("collapse")
+                            || hostMeta.contains("expand");
+                    boolean collapsedGeometry = hostRect.bottom <= bestControlRect.bottom + 40;
+                    if ((visibleRows >= 2 || ghostRows >= 3) && (accordionHint || collapsedGeometry))
+                    {
+                        return new InlineDropdownAccordionTarget(
+                                bestControlRect, arrowRect, visibleRows, ghostRows);
+                    }
+                }
+                ancestor = ancestor.getParentNode();
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return null;
+    }
+
+    private int countRawOcrBlocksInsideAccordionRows(List<android.graphics.Rect> choiceRows)
+    {
+        if (choiceRows == null || choiceRows.isEmpty()) return 0;
+
+        int matchedRows = 0;
+        java.util.HashSet<Integer> matchedIndexes = new java.util.HashSet<>();
+        try
+        {
+            List<HSQTools.TextBlock> rawOcr = HSQTools.getOcrTextBlocks();
+            for (HSQTools.TextBlock block : rawOcr)
+            {
+                if (block == null || block.text == null) continue;
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(block.text));
+                if (clean.isEmpty() || clean.equals("lightspeed") || clean.contains("poweredby")) continue;
+
+                for (int i = 0; i < choiceRows.size(); i++)
+                {
+                    if (matchedIndexes.contains(i)) continue;
+                    android.graphics.Rect row = choiceRows.get(i);
+                    if (block.x >= row.left - 24 && block.x <= row.right + 24
+                            && block.y >= row.top - 24 && block.y <= row.bottom + 24)
+                    {
+                        matchedIndexes.add(i);
+                        matchedRows++;
+                        break;
+                    }
+                }
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return matchedRows;
+    }
+
+    private boolean tryPerformAccessibilityClickForExactBounds(android.graphics.Rect expectedBounds)
+    {
+        AccessibilityNodeInfo root = null;
+        try
+        {
+            if (ASBLBridgeService.asblService == null || expectedBounds == null) return false;
+            root = ASBLBridgeService.asblService.getRootInActiveWindow();
+            return performAccessibilityClickForExactBounds(root, expectedBounds);
+        }
+        catch (Exception ignored)
+        {
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (root != null) root.recycle();
+            }
+            catch (Exception ignored) {}
+        }
+    }
+
+    private boolean performAccessibilityClickForExactBounds(AccessibilityNodeInfo node, android.graphics.Rect expectedBounds)
+    {
+        if (node == null || expectedBounds == null) return false;
+        try
+        {
+            if (node.isEnabled() && node.isVisibleToUser())
+            {
+                android.graphics.Rect actualBounds = new android.graphics.Rect();
+                node.getBoundsInScreen(actualBounds);
+                boolean boundsMatch = Math.abs(actualBounds.left - expectedBounds.left) <= 40
+                        && Math.abs(actualBounds.top - expectedBounds.top) <= 40
+                        && Math.abs(actualBounds.right - expectedBounds.right) <= 40
+                        && Math.abs(actualBounds.bottom - expectedBounds.bottom) <= 40;
+                boolean supportsClick = node.isClickable()
+                        || (node.getActions() & AccessibilityNodeInfo.ACTION_CLICK) == AccessibilityNodeInfo.ACTION_CLICK;
+                if (boundsMatch && supportsClick && node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                {
+                    return true;
+                }
+            }
+
+            for (int i = 0; i < node.getChildCount(); i++)
+            {
+                AccessibilityNodeInfo child = null;
+                try
+                {
+                    child = node.getChild(i);
+                    if (child != null && performAccessibilityClickForExactBounds(child, expectedBounds)) return true;
+                }
+                finally
+                {
+                    try
+                    {
+                        if (child != null) child.recycle();
+                    }
+                    catch (Exception ignored) {}
+                }
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return false;
     }
 
     private boolean isLikelyHtmlSelectButton(String raw, String resId, String clazz, android.graphics.Rect rect)
@@ -8916,8 +11455,284 @@ public class StartAuto extends HSQService
                 || lowerRaw.contains("please select");
         return buttonLike && selectMeta && rect.width() >= widthOfScreen * 0.35f && rect.height() >= 45;
     }
+
+    private static final class LabeledDropdownControl
+    {
+        final android.graphics.Rect rect;
+        final String resourceId;
+        final String rawText;
+
+        LabeledDropdownControl(android.graphics.Rect rect, String resourceId, String rawText)
+        {
+            this.rect = rect;
+            this.resourceId = resourceId == null ? "" : resourceId;
+            this.rawText = rawText == null ? "" : rawText;
+        }
+    }
+
+    private boolean isDropdownPlaceholderText(String rawText)
+    {
+        if (rawText == null) return false;
+        String rawCompact = rawText.trim().replaceAll("\\s+", "");
+        String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawText));
+        return rawCompact.matches("^[=._\\-]{3,}$")
+                || clean.contains("vuilongluachon")
+                || clean.contains("vuilongchon")
+                || clean.contains("pleaseselect")
+                || clean.contains("selectone")
+                || clean.contains("chooseone")
+                || clean.equals("chon")
+                || clean.equals("select");
+    }
+
+    private LabeledDropdownControl findLabeledDropdownControlInXml(String contextStr)
+    {
+        String target = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(contextStr == null ? "" : contextStr));
+        if (target.length() < 3) return null;
+
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return null;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            org.w3c.dom.Element bestLabel = null;
+            android.graphics.Rect bestLabelRect = null;
+            long bestLabelScore = Long.MAX_VALUE;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String raw = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+                if (!isDropdownTargetTextMatch(clean, target)) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+                if (!isXmlRectUsablyVisible(visibleRect)) continue;
+
+                long score = (long) visibleRect.width() * visibleRect.height();
+                if (clean.equals(target)) score -= 1000000L;
+                if ("true".equals(node.getAttribute("clickable"))) score += 500000L;
+                if (score < bestLabelScore)
+                {
+                    bestLabelScore = score;
+                    bestLabel = node;
+                    bestLabelRect = new android.graphics.Rect(visibleRect);
+                }
+            }
+            if (bestLabel == null || bestLabelRect == null) return null;
+
+            org.w3c.dom.Node ancestor = bestLabel.getParentNode();
+            int depth = 0;
+            while (ancestor instanceof org.w3c.dom.Element && depth < 7)
+            {
+                org.w3c.dom.Element host = (org.w3c.dom.Element) ancestor;
+                org.w3c.dom.NodeList descendants = host.getElementsByTagName("node");
+                LabeledDropdownControl bestControl = null;
+                long bestControlScore = Long.MAX_VALUE;
+
+                for (int i = 0; i < descendants.getLength(); i++)
+                {
+                    org.w3c.dom.Element node = (org.w3c.dom.Element) descendants.item(i);
+                    if (node == bestLabel || "false".equals(node.getAttribute("enabled"))) continue;
+
+                    String clazz = node.getAttribute("class").toLowerCase(Locale.ROOT);
+                    boolean autocomplete = clazz.contains("autocomplete");
+                    if (clazz.contains("edittext") && !autocomplete) continue;
+                    if (isChoiceControlNode(node)) continue;
+
+                    boolean interactive = "true".equals(node.getAttribute("clickable"))
+                            || "true".equals(node.getAttribute("focusable"))
+                            || clazz.contains("spinner")
+                            || autocomplete;
+                    if (!interactive) continue;
+
+                    android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                    android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+                    if (!isXmlRectUsablyVisible(visibleRect)) continue;
+                    if (visibleRect.width() < widthOfScreen * 0.45f || visibleRect.height() < 45 || visibleRect.height() > 320) continue;
+                    if (visibleRect.top < bestLabelRect.bottom - 20 || visibleRect.top > bestLabelRect.bottom + 650) continue;
+
+                    String raw = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                    String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+                    if (isDropdownNavigationButtonText(clean)) continue;
+
+                    String rid = node.getAttribute("resource-id").toLowerCase(Locale.ROOT);
+                    boolean idHint = rid.contains("dropdown") || rid.contains("spinner") || rid.contains("select")
+                            || rid.endsWith("-element") || rid.endsWith("_element");
+                    boolean classHint = clazz.contains("spinner") || autocomplete;
+                    boolean placeholder = isDropdownPlaceholderText(raw);
+                    if (!idHint && !classHint && !placeholder) continue;
+
+                    long score = Math.abs(visibleRect.top - bestLabelRect.bottom) * 1000L
+                            + Math.abs(visibleRect.centerX() - bestLabelRect.centerX());
+                    if (placeholder) score -= 500000L;
+                    if (idHint) score -= 250000L;
+                    if ("true".equals(node.getAttribute("focusable"))) score -= 100000L;
+                    if (score < bestControlScore)
+                    {
+                        bestControlScore = score;
+                        bestControl = new LabeledDropdownControl(
+                                new android.graphics.Rect(visibleRect), node.getAttribute("resource-id"), raw);
+                    }
+                }
+
+                if (bestControl != null) return bestControl;
+                ancestor = ancestor.getParentNode();
+                depth++;
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return null;
+    }
+
+    private boolean tryOpenLabeledDropdownControlFromXml(String contextStr)
+    {
+        LabeledDropdownControl control = findLabeledDropdownControlInXml(contextStr);
+        if (control == null || control.rect == null) return false;
+
+        int rightInset = Math.max(32, Math.min(56, control.rect.height() / 3));
+        int clickX = Math.max(control.rect.left + 24, control.rect.right - rightInset);
+        int clickY = control.rect.centerY();
+        updateNotificationContent("Dropdown field-box: touch 1 lan tai " + clickX + "," + clickY
+                + " id=" + control.resourceId);
+        click(clickX, clickY, false);
+        delay(2500);
+        return true;
+    }
+
+    private boolean isDistrictLocationField(String rawText)
+    {
+        String normalized = HSQTools.normalizeText(rawText == null ? "" : rawText).toLowerCase(Locale.ROOT);
+        String clean = HSQTools.getOnlyTextLinq(normalized);
+        boolean locationContext = clean.contains("sinhsong")
+                || clean.contains("cutru")
+                || clean.contains("diachi")
+                || clean.contains("noio")
+                || clean.contains("reside")
+                || clean.contains("residence")
+                || clean.contains("living")
+                || clean.contains("whereyou");
+        boolean vietnameseDistrictPair = clean.contains("quanhuyen")
+                || clean.contains("huyenthixa")
+                || clean.contains("huyenthanhpho")
+                || clean.equals("quan")
+                || clean.equals("huyen")
+                || clean.equals("thixa");
+        boolean locationToken = Pattern.compile("(^|[^a-z])(quan|huyen|thi\\s*xa)([^a-z]|$)")
+                .matcher(normalized).find() && locationContext;
+        return vietnameseDistrictPair
+                || locationToken
+                || clean.contains("district")
+                || clean.contains("county")
+                || clean.contains("borough");
+    }
+
+    private boolean isProvinceLocationLabel(String rawText)
+    {
+        String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawText == null ? "" : rawText));
+        boolean province = clean.contains("tinhthanh")
+                || clean.contains("province")
+                || clean.contains("stateprovince")
+                || clean.contains("provincecity");
+        return province && !isDistrictLocationField(clean);
+    }
+
+    private boolean isProvinceSelectionPendingInXml()
+    {
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return false;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String raw = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                if (!isProvinceLocationLabel(raw)) continue;
+
+                Boolean pending = getDropdownPlaceholderStateNearLabel(node);
+                if (pending != null) return pending;
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return false;
+    }
+
+    private Boolean getDropdownPlaceholderStateNearLabel(org.w3c.dom.Element labelNode)
+    {
+        if (labelNode == null) return null;
+        org.w3c.dom.Node ancestor = labelNode.getParentNode();
+        int depth = 0;
+        while (ancestor instanceof org.w3c.dom.Element && depth < 7)
+        {
+            org.w3c.dom.Element host = (org.w3c.dom.Element) ancestor;
+            org.w3c.dom.NodeList descendants = host.getElementsByTagName("node");
+            org.w3c.dom.Element bestControl = null;
+            int bestScore = Integer.MIN_VALUE;
+
+            for (int i = 0; i < descendants.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) descendants.item(i);
+                if (node == labelNode || "false".equals(node.getAttribute("enabled"))) continue;
+                String clazz = node.getAttribute("class").toLowerCase(Locale.ROOT);
+                boolean autocomplete = clazz.contains("autocomplete");
+                if (clazz.contains("edittext") && !autocomplete) continue;
+                if (isChoiceControlNode(node)) continue;
+
+                boolean interactive = "true".equals(node.getAttribute("clickable"))
+                        || "true".equals(node.getAttribute("focusable"))
+                        || clazz.contains("spinner")
+                        || autocomplete;
+                if (!interactive) continue;
+
+                String raw = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                String rid = node.getAttribute("resource-id").toLowerCase(Locale.ROOT);
+                boolean idHint = rid.contains("dropdown") || rid.contains("spinner") || rid.contains("select")
+                        || rid.endsWith("-element") || rid.endsWith("_element");
+                boolean classHint = clazz.contains("spinner") || autocomplete;
+                boolean placeholder = isDropdownPlaceholderText(raw);
+                if (!idHint && !classHint && !placeholder) continue;
+
+                int score = 0;
+                if (placeholder) score += 500;
+                if (idHint) score += 300;
+                if ("true".equals(node.getAttribute("focusable"))) score += 100;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestControl = node;
+                }
+            }
+
+            if (bestControl != null)
+            {
+                String current = (bestControl.getAttribute("text") + " "
+                        + bestControl.getAttribute("content-desc")).trim();
+                return isDropdownPlaceholderText(current);
+            }
+            ancestor = ancestor.getParentNode();
+            depth++;
+        }
+        return null;
+    }
+
     private List<TextBlock> clickDropDown(String contextStr)
     {
+        if (tryHandleStackedDobDropdownTarget(contextStr, false))
+        {
+            return null;
+        }
+
         int vuotTimKiem = 0;
         int vuotLenLai = 0;
         int daVuotLen = 0;
@@ -8987,9 +11802,25 @@ public class StartAuto extends HSQService
 
             if (exactTextNode == null)
             {
-                if (vuotLenLai < 2)
+                exactTextNode = findVisibleDropdownAnchorInXml(contextStr);
+            }
+
+            if (exactTextNode == null)
+            {
+                int xmlDirection = getDropdownTargetScrollDirection(contextStr);
+                int maxSearchSwipes = xmlDirection == 0 ? 2 : 6;
+                if (vuotLenLai < maxSearchSwipes)
                 {
-                    swipe(xCenter, yBot, xCenter, yTop, 2000);
+                    if (xmlDirection < 0)
+                    {
+                        updateNotificationContent("Dropdown target nam phia tren, cuon nguoc: " + contextStr);
+                        smartScroll(yTop, yBot, "dropdown_target_above");
+                    }
+                    else
+                    {
+                        updateNotificationContent("Dropdown target nam phia duoi/khong ro, cuon xuong: " + contextStr);
+                        smartScroll(yBot, yTop, "dropdown_target_below");
+                    }
                     delay(2000);
                     currentScreen = getCheckAnswerSmart();
                     phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
@@ -9012,7 +11843,23 @@ public class StartAuto extends HSQService
                 continue;
             }
 
+            // Survey panels often expose a label/instruction/control triplet inside one *-box.
+            // Click the exact *-element chevron once; a second toggle can immediately close
+            // WebView/native select popups that are invisible to the accessibility snapshot.
+            if (tryOpenLabeledDropdownControlFromXml(contextStr))
+            {
+                return null;
+            }
+
+            if (tryOpenInlineDropdownAccordion(contextStr, exactTextNode) > 0)
+            {
+                return null;
+            }
+
             List<android.graphics.Point> candidates = new ArrayList<>();
+            android.graphics.Rect semanticDropdownRect = null;
+            String semanticDropdownResourceId = "";
+            String semanticDropdownRawLabel = "";
 
             try
             {
@@ -9124,6 +11971,7 @@ public class StartAuto extends HSQService
                 }
 
                 android.graphics.Rect bestDropdownRect = null;
+                XmlNodeTemp bestDropdownNode = null;
                 double bestScore = Double.MAX_VALUE;
 
                 for (XmlNodeTemp n : xmlNodes)
@@ -9151,6 +11999,7 @@ public class StartAuto extends HSQService
                     // 🔥 BẮT MẠCH AN TOÀN: Nếu đích thị là Input xịn (Spinner/EditText) thì mới ưu tiên cao
                     if (sameTextAsLabel && classLooksInput) {
                         bestDropdownRect = r;
+                        bestDropdownNode = n;
                         break; // Nghỉ tính điểm lằng nhằng, ăn luôn!
                     }
 
@@ -9227,11 +12076,19 @@ public class StartAuto extends HSQService
                     {
                         bestScore = score;
                         bestDropdownRect = r;
+                        bestDropdownNode = n;
                     }
                 }
 
                 if (bestDropdownRect != null)
                 {
+                    semanticDropdownRect = new android.graphics.Rect(bestDropdownRect);
+                    if (bestDropdownNode != null)
+                    {
+                        semanticDropdownResourceId = bestDropdownNode.resId == null ? "" : bestDropdownNode.resId;
+                        semanticDropdownRawLabel = ((bestDropdownNode.rawText == null ? "" : bestDropdownNode.rawText) + " "
+                                + (bestDropdownNode.rawDesc == null ? "" : bestDropdownNode.rawDesc)).trim();
+                    }
                     int safeX = bestDropdownRect.left + (int) (bestDropdownRect.width() * 0.82);
                     if (safeX > bestDropdownRect.right - 20) safeX = bestDropdownRect.centerX();
 
@@ -9251,6 +12108,48 @@ public class StartAuto extends HSQService
                 }
             }
             catch (Exception ignored) {}
+
+            List<TextBlock> beforeClick = currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList());
+            if (semanticDropdownRect != null)
+            {
+                String beforeXmlSignature = getSmartScrollXmlSignature();
+                boolean semanticClicked = tryPerformAccessibilityClickForXmlNavigation(
+                        semanticDropdownResourceId, semanticDropdownRawLabel, semanticDropdownRect);
+                if (semanticClicked)
+                {
+                    updateNotificationContent("Dropdown ACTION_CLICK: " + semanticDropdownResourceId);
+                    delay(2500);
+                    List<TextBlock> afterSemantic = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                    String afterXmlSignature = getSmartScrollXmlSignature();
+                    int popupState = getOpenDropdownPopupStateFromXml();
+                    boolean xmlChanged = beforeXmlSignature != null && !beforeXmlSignature.isEmpty()
+                            && afterXmlSignature != null && !afterXmlSignature.isEmpty()
+                            && !beforeXmlSignature.equals(afterXmlSignature);
+                    if (popupState != 0 || xmlChanged || isDropdownExpandedAfterClick(beforeClick, afterSemantic, 10))
+                    {
+                        updateNotificationContent("Dropdown mo bang ACTION_CLICK: popup=" + popupState);
+                        return null;
+                    }
+                }
+
+                updateNotificationContent("Dropdown semantic chua mo, touch dung 1 lan tai center");
+                click(semanticDropdownRect.centerX(), semanticDropdownRect.centerY(), false);
+                delay(4500);
+                List<TextBlock> afterTouch = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                String afterTouchXmlSignature = getSmartScrollXmlSignature();
+                int popupState = getOpenDropdownPopupStateFromXml();
+                boolean xmlChanged = beforeXmlSignature != null && !beforeXmlSignature.isEmpty()
+                        && afterTouchXmlSignature != null && !afterTouchXmlSignature.isEmpty()
+                        && !beforeXmlSignature.equals(afterTouchXmlSignature);
+                if (popupState != 0 || xmlChanged || isDropdownExpandedAfterClick(beforeClick, afterTouch, 10))
+                {
+                    updateNotificationContent("Dropdown mo bang touch center: popup=" + popupState);
+                    return null;
+                }
+
+                // We already found the exact XML control. Do not toggle it again through OCR/ASBL aliases.
+                return currentScreen;
+            }
 
             try
             {
@@ -9394,7 +12293,6 @@ public class StartAuto extends HSQService
             catch (Exception ignored) {}
 
             boolean isOpened = false;
-            List<TextBlock> beforeClick = currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList());
 
             for (android.graphics.Point pt : candidates)
             {
@@ -9402,10 +12300,11 @@ public class StartAuto extends HSQService
                 delay(4500);
 
                 List<TextBlock> afterClick = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
-                boolean dropdownExpanded = isDropdownExpandedAfterClick(beforeClick, afterClick, 10);
+                int popupState = getOpenDropdownPopupStateFromXml();
+                boolean dropdownExpanded = popupState != 0 || isDropdownExpandedAfterClick(beforeClick, afterClick, 10);
                 if (dropdownExpanded)
                 {
-                    updateNotificationContent("Dropdown mo: before=" + beforeClick.size() + ", after=" + afterClick.size());
+                    updateNotificationContent("Dropdown mo: popup=" + popupState + ", before=" + beforeClick.size() + ", after=" + afterClick.size());
                     isOpened = true;
                     break;
                 }
@@ -9444,11 +12343,121 @@ public class StartAuto extends HSQService
         }
     }
 
+    private HSQTools.TextBlock findVisibleDropdownAnchorInXml(String contextStr)
+    {
+        String target = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(contextStr));
+        if (target.isEmpty()) return null;
+
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return null;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            HSQTools.TextBlock best = null;
+            long bestScore = Long.MAX_VALUE;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String raw = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+                if (!isDropdownTargetTextMatch(clean, target)) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+                if (!isXmlRectUsablyVisible(visibleRect)) continue;
+
+                long score = (long) visibleRect.width() * visibleRect.height();
+                if (clean.equals(target)) score -= 1000000L;
+                if ("true".equals(node.getAttribute("clickable"))) score += 120000L;
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = new HSQTools.TextBlock(raw, visibleRect.centerX(), visibleRect.centerY());
+                }
+            }
+            return best;
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
+    private int getDropdownTargetScrollDirection(String contextStr)
+    {
+        String target = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(contextStr));
+        if (target.isEmpty()) return 0;
+
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return 0;
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+
+            int viewportTop = 180;
+            int viewportBottom = heightOfScreen - 80;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String clazz = node.getAttribute("class");
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null || r.height() < heightOfScreen * 0.45f || r.width() < widthOfScreen * 0.75f) continue;
+                if ("true".equals(node.getAttribute("scrollable")) || (clazz != null && clazz.contains("WebView")))
+                {
+                    viewportTop = Math.max(180, r.top);
+                    viewportBottom = Math.min(heightOfScreen - 80, r.bottom);
+                    break;
+                }
+            }
+
+            int above = 0;
+            int below = 0;
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String raw = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+                if (!isDropdownTargetTextMatch(clean, target)) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                if (r == null) continue;
+                if (r.height() > 8 && r.centerY() > viewportTop + 10 && r.centerY() < viewportBottom - 10)
+                    return 0;
+                if (r.bottom <= viewportTop + 12 || r.centerY() <= viewportTop + 12) above++;
+                else if (r.top >= viewportBottom - 12 || r.centerY() >= viewportBottom - 12) below++;
+            }
+
+            if (above > below && above > 0) return -1;
+            if (below > above && below > 0) return 1;
+        }
+        catch (Exception ignored)
+        {
+        }
+        return 0;
+    }
+
+    private boolean isDropdownTargetTextMatch(String clean, String target)
+    {
+        if (clean == null || target == null || clean.isEmpty() || target.isEmpty()) return false;
+        if (clean.equals(target) || clean.contains(target)) return true;
+        if (target.contains(clean) && clean.length() >= 4) return true;
+        if (clean.length() < 4 || target.length() < 4) return false;
+        int allowed = Math.max(1, (int) (target.length() * 0.18f));
+        return Math.abs(clean.length() - target.length()) <= allowed + 1
+                && HSQTools.levenshtein(clean, target) <= allowed;
+    }
+
     private boolean isDropdownExpandedAfterClick(List<TextBlock> beforeClick, List<TextBlock> afterClick, int tolerance)
     {
         List<TextBlock> before = getComparableDropdownBlocks(beforeClick);
         List<TextBlock> after = getComparableDropdownBlocks(afterClick);
-        if (before.isEmpty() || after.size() < before.size() + 2) return false;
+        if (before.isEmpty() || after.isEmpty()) return false;
 
         int newBlockCount = 0;
         for (TextBlock afterBlock : after)
@@ -10048,6 +13057,220 @@ public class StartAuto extends HSQService
         return 999;
     }
 
+    private static class InputDropdownTarget
+    {
+        String resourceId;
+        String rawLabel;
+        String currentText;
+        android.graphics.Rect rect;
+
+        InputDropdownTarget(String resourceId, String rawLabel, String currentText, android.graphics.Rect rect)
+        {
+            this.resourceId = resourceId == null ? "" : resourceId;
+            this.rawLabel = rawLabel == null ? "" : rawLabel;
+            this.currentText = currentText == null ? "" : currentText;
+            this.rect = rect;
+        }
+    }
+
+    private InputDropdownTarget findInputDropdownTarget(String xml, String labelToFind)
+    {
+        if (xml == null || xml.trim().isEmpty() || labelToFind == null) return null;
+
+        String normTarget = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(labelToFind));
+        if (normTarget.length() < 2) return null;
+
+        try
+        {
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+            java.util.LinkedHashSet<String> questionIds = new java.util.LinkedHashSet<>();
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String raw = ((node.getAttribute("text") == null ? "" : node.getAttribute("text")) + " "
+                        + (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).trim();
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+                if (!isInputLabelMatch(clean, normTarget)) continue;
+
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+                android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+                if (!isXmlRectUsablyVisible(visibleRect)) continue;
+
+                org.w3c.dom.Node current = node;
+                while (current instanceof org.w3c.dom.Element)
+                {
+                    org.w3c.dom.Element element = (org.w3c.dom.Element) current;
+                    String rid = element.getAttribute("resource-id");
+                    if (rid != null && rid.matches("(?i)^QID[^~]+$"))
+                    {
+                        questionIds.add(rid);
+                        break;
+                    }
+                    current = current.getParentNode();
+                }
+            }
+
+            // Qualtrics and similar survey DOMs expose QID<n> as the question root and
+            // QR~QID<n> as the actual response control. Text inputs are EditText;
+            // a non-editable interactive View/Spinner is a select disguised as input.
+            for (String questionId : questionIds)
+            {
+                String expectedControlId = "QR~" + questionId;
+                for (int i = 0; i < nodes.getLength(); i++)
+                {
+                    org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                    if (!expectedControlId.equalsIgnoreCase(node.getAttribute("resource-id"))) continue;
+
+                    InputDropdownTarget target = buildInputDropdownTarget(node);
+                    if (target != null) return target;
+                }
+            }
+
+            // Generic WebView fallback: an interactive non-editable control carrying the
+            // label, with select metadata or a compact scrollable wrapper, is dropdown-like.
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+                String raw = ((node.getAttribute("text") == null ? "" : node.getAttribute("text")) + " "
+                        + (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).trim();
+                String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(raw));
+                if (!isInputLabelMatch(clean, normTarget)) continue;
+
+                InputDropdownTarget target = buildInputDropdownTarget(node);
+                if (target == null) continue;
+
+                String clazz = node.getAttribute("class") == null ? "" : node.getAttribute("class").toLowerCase(Locale.ROOT);
+                boolean directSelectHint = isDropdownClassOrId(node)
+                        || clazz.contains("spinner")
+                        || clazz.contains("autocomplete")
+                        || isLikelyHtmlSelectButton(raw, node.getAttribute("resource-id"), node.getAttribute("class"), target.rect);
+                boolean wrappedWebSelect = clazz.contains("view")
+                        && "true".equals(node.getAttribute("clickable"))
+                        && "true".equals(node.getAttribute("focusable"))
+                        && hasCompactScrollableInputAncestor(node, target.rect);
+                if (directSelectHint || wrappedWebSelect) return target;
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return null;
+    }
+
+    private InputDropdownTarget buildInputDropdownTarget(org.w3c.dom.Element node)
+    {
+        if (node == null || "false".equals(node.getAttribute("enabled"))) return null;
+        if (isChoiceControlNode(node)) return null;
+
+        String clazzRaw = node.getAttribute("class") == null ? "" : node.getAttribute("class");
+        String clazz = clazzRaw.toLowerCase(Locale.ROOT);
+        boolean autocomplete = clazz.contains("autocomplete");
+        if (clazz.contains("edittext") && !autocomplete) return null;
+        if (clazz.contains("radio") || clazz.contains("checkbox") || clazz.contains("toggle")) return null;
+
+        boolean interactive = "true".equals(node.getAttribute("clickable"))
+                || "true".equals(node.getAttribute("focusable"))
+                || clazz.contains("spinner")
+                || autocomplete;
+        if (!interactive) return null;
+
+        String rid = node.getAttribute("resource-id") == null ? "" : node.getAttribute("resource-id");
+        if (rid.matches("(?i)^QR~QID[^~]+~.+$")) return null;
+
+        android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+        android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+        if (!isXmlRectUsablyVisible(visibleRect)) return null;
+        if (visibleRect.width() < 100 || visibleRect.height() < 35 || visibleRect.height() > 320) return null;
+
+        String rawText = node.getAttribute("text") == null ? "" : node.getAttribute("text");
+        String rawLabel = (rawText + " " + (node.getAttribute("content-desc") == null ? "" : node.getAttribute("content-desc"))).trim();
+        return new InputDropdownTarget(rid, rawLabel, rawText, new android.graphics.Rect(visibleRect));
+    }
+
+    private boolean hasCompactScrollableInputAncestor(org.w3c.dom.Element node, android.graphics.Rect controlRect)
+    {
+        if (node == null || controlRect == null) return false;
+
+        org.w3c.dom.Node parent = node.getParentNode();
+        int depth = 0;
+        while (parent instanceof org.w3c.dom.Element && depth < 3)
+        {
+            org.w3c.dom.Element element = (org.w3c.dom.Element) parent;
+            if ("true".equals(element.getAttribute("scrollable")))
+            {
+                android.graphics.Rect r = HSQTools.parseBoundsFromXml(element.getAttribute("bounds"));
+                if (r != null
+                        && r.contains(controlRect.centerX(), controlRect.centerY())
+                        && r.width() >= controlRect.width() * 0.70f
+                        && r.height() >= controlRect.height()
+                        && r.height() <= Math.max(420, controlRect.height() + 260))
+                {
+                    return true;
+                }
+            }
+            parent = parent.getParentNode();
+            depth++;
+        }
+        return false;
+    }
+
+    private List<HSQTools.TextBlock> selectInputDropdownValue(InputDropdownTarget target, String labelToFind, String valueToInput)
+    {
+        String valueNorm = cleanClickToTextMatchText(valueToInput);
+        String currentNorm = cleanClickToTextMatchText(target == null ? "" : target.currentText);
+        if (!valueNorm.isEmpty() && (currentNorm.equals(valueNorm) || HSQTools.equalsOcrFriendly(currentNorm, valueNorm)))
+        {
+            updateNotificationContent("Input->Dropdown: gia tri da duoc chon san [" + valueToInput + "]");
+            return null;
+        }
+
+        List<HSQTools.TextBlock> beforeOpen = getCheckAnswerSmart().stream()
+                .filter(x -> x.y > 180).collect(Collectors.toList());
+        String beforeSignature = getSmartScrollXmlSignature();
+        updateNotificationContent("Input->Dropdown: mo control [" + labelToFind + "] de chon [" + valueToInput + "]");
+
+        List<TextBlock> openResult = clickDropDown(labelToFind);
+        if (openResult != null) return openResult;
+
+        delay(700);
+        boolean keyboardOpened = HSQTools.isKeyboardVisibleSmart();
+        List<HSQTools.TextBlock> afterOpen = getCheckAnswerSmart().stream()
+                .filter(x -> x.y > 180).collect(Collectors.toList());
+        String afterSignature = getSmartScrollXmlSignature();
+        boolean xmlChanged = beforeSignature != null && !beforeSignature.isEmpty()
+                && afterSignature != null && !afterSignature.isEmpty()
+                && !beforeSignature.equals(afterSignature);
+        boolean screenChanged = !HSQTools.areAlmostSame(beforeOpen, afterOpen, 20);
+        boolean popupOpened = getOpenDropdownPopupStateFromXml() != 0;
+        if (!keyboardOpened && !popupOpened && !xmlChanged && !screenChanged)
+        {
+            updateNotificationContent("Input->Dropdown: control chi focus, popup chua mo");
+            return afterOpen;
+        }
+
+        if (keyboardOpened)
+        {
+            updateNotificationContent("Input->Dropdown: dropdown co tim kiem, go [" + valueToInput + "]");
+            clearAllText();
+            delay(400);
+            inputText(valueToInput, null, true);
+            delay(2200);
+        }
+
+        clickToTextMinY = 0;
+        android.graphics.Rect excludedSearchField = keyboardOpened && target != null ? target.rect : null;
+        List<TextBlock> selectResult = clickToText(valueToInput, true, excludedSearchField);
+        if (selectResult == null && HSQTools.isKeyboardVisibleSmart())
+        {
+            globalBack();
+            delay(700);
+        }
+        return selectResult;
+    }
+
     private List<HSQTools.TextBlock> clickInput(String labelToFind, String valueToInput)
     {
         List<HSQTools.TextBlock> tempCompare = new ArrayList<>();
@@ -10059,11 +13282,18 @@ public class StartAuto extends HSQService
             phoneScreen.addAll(currentScreen.stream().filter(x -> x.y > 180).collect(Collectors.toList()));
             phoneScreen.add(new HSQTools.TextBlock("Đã vuốt xuống", 0, 0));
             int inputX = -1, inputY = -1;
+            android.graphics.Rect selectedInputRect = null;
 
             // =========================================================
             // 🎯 1. TẦNG BỌC THÉP XML: QUÉT 2 LƯỢT & CHỐNG NÚT ẢO
             // =========================================================
             String xml = HSQTools.getFlexibleXML();
+            InputDropdownTarget inputDropdownTarget = findInputDropdownTarget(xml, labelToFind);
+            if (inputDropdownTarget != null)
+            {
+                return selectInputDropdownValue(inputDropdownTarget, labelToFind, valueToInput);
+            }
+
             try
             {
                 javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
@@ -10089,6 +13319,7 @@ public class StartAuto extends HSQService
                             {
                                 inputX = r.centerX();
                                 inputY = r.centerY();
+                                selectedInputRect = new android.graphics.Rect(r);
                                 updateNotificationContent("XML: Tóm gọn Placeholder VIP tại Y=" + inputY);
                                 break;
                             }
@@ -10166,6 +13397,7 @@ public class StartAuto extends HSQService
                         {
                             inputX = bestXmlInput.centerX();
                             inputY = bestXmlInput.centerY();
+                            selectedInputRect = new android.graphics.Rect(bestXmlInput);
                         }
                     }
                 }
@@ -10180,6 +13412,7 @@ public class StartAuto extends HSQService
                 {
                     inputX = looseXmlInput.centerX();
                     inputY = looseXmlInput.centerY();
+                    selectedInputRect = new android.graphics.Rect(looseXmlInput);
                     updateNotificationContent("XML loose: Tóm được ô nhập tại X=" + inputX + ", Y=" + inputY);
                 }
             }
@@ -10206,6 +13439,7 @@ public class StartAuto extends HSQService
                     {
                         inputX = inputRect.centerX();
                         inputY = inputRect.centerY();
+                        selectedInputRect = new android.graphics.Rect(inputRect);
                         updateNotificationContent("ASBL: Tóm được ô nhập tại Y=" + inputY);
                     }
                     if (root != null) root.recycle();
@@ -10230,15 +13464,41 @@ public class StartAuto extends HSQService
             // =========================================================
              if (inputX != -1 && inputY != -1)
             {
-                updateNotificationContent("Chọt ô nhập: X=" + inputX + ", Y=" + inputY);
-                click(inputX, inputY, false);
-                delay(3000);
+                android.graphics.Point safeTouchPoint = selectedInputRect == null
+                        ? new android.graphics.Point(inputX, inputY)
+                        : findSafeInputTouchPoint(selectedInputRect, xml);
 
-                if (HSQTools.isKeyboardVisibleSmart())
+                boolean semanticFocused = selectedInputRect != null
+                        && tryFocusInputForExactBounds(selectedInputRect);
+                boolean keyboardVisible = false;
+                if (semanticFocused)
+                {
+                    updateNotificationContent("Input ACTION_FOCUS/CLICK đúng EditText tại Y=" + selectedInputRect.centerY());
+                    delay(1800);
+                    keyboardVisible = HSQTools.isKeyboardVisibleSmart();
+                }
+
+                if (!keyboardVisible)
+                {
+                    inputX = safeTouchPoint.x;
+                    inputY = safeTouchPoint.y;
+                    updateNotificationContent("Chọt ô nhập an toàn: X=" + inputX + ", Y=" + inputY);
+                    click(inputX, inputY, false);
+                    delay(3000);
+                    keyboardVisible = HSQTools.isKeyboardVisibleSmart();
+                }
+
+                if (keyboardVisible)
                 {
                     clearAllText();
                     delay(1000);
-                    inputText(valueToInput, null, true);
+                    String resolvedInputValue = resolveProfileBackedInputValue(
+                            xml, selectedInputRect, labelToFind, valueToInput);
+                    if (!resolvedInputValue.equals(valueToInput))
+                    {
+                        updateNotificationContent("Input: validator/metadata doi gia tri [" + valueToInput + "] -> [" + resolvedInputValue + "]");
+                    }
+                    inputText(resolvedInputValue, null, true);
                     delay(2500);
                     globalBack();
                     delay(2000);
@@ -10275,6 +13535,310 @@ public class StartAuto extends HSQService
         }
     }
 
+    private String resolveProfileBackedInputValue(String xml, android.graphics.Rect inputRect,
+                                                  String labelToFind, String proposedValue)
+    {
+        int profileAge = getActiveProfileAgeForInput();
+        if (profileAge <= 0 || inputRect == null || xml == null || xml.trim().isEmpty()) return proposedValue;
+
+        try
+        {
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+            org.w3c.dom.Element inputNode = findXmlEditTextForRect(nodes, inputRect);
+            if (inputNode == null) return proposedValue;
+
+            org.w3c.dom.Element fieldContainer = findNearestSingleInputFieldContainer(inputNode);
+            String validationText = collectVisibleInputValidationText(fieldContainer);
+            String fieldContext = (labelToFind == null ? "" : labelToFind) + " " + collectInputFieldContext(fieldContainer);
+            if (isAgeSemanticInput(inputNode, fieldContext, validationText))
+            {
+                return String.valueOf(profileAge);
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+        return proposedValue;
+    }
+
+    // 0 = no visible validation, 1 = validation exists but was not repaired, 2 = repaired.
+    private int handleProfileBackedInputValidationFromXml()
+    {
+        int profileAge = getActiveProfileAgeForInput();
+        try
+        {
+            String xml = HSQTools.getFlexibleXML();
+            if (xml == null || xml.trim().isEmpty()) return 0;
+
+            javax.xml.parsers.DocumentBuilder builder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            org.w3c.dom.NodeList nodes = doc.getElementsByTagName("node");
+            boolean sawValidation = false;
+
+            for (int i = 0; i < nodes.getLength(); i++)
+            {
+                org.w3c.dom.Element inputNode = (org.w3c.dom.Element) nodes.item(i);
+                String clazz = inputNode.getAttribute("class");
+                if (clazz == null || (!clazz.contains("EditText") && !clazz.contains("AutoCompleteTextView"))) continue;
+                if ("false".equals(inputNode.getAttribute("enabled"))) continue;
+
+                android.graphics.Rect inputRect = HSQTools.parseBoundsFromXml(inputNode.getAttribute("bounds"));
+                if (inputRect == null || inputRect.width() <= 0 || inputRect.height() <= 10) continue;
+                if (inputRect.centerY() <= 180 || inputRect.centerY() >= heightOfScreen - 80) continue;
+
+                org.w3c.dom.Element fieldContainer = findNearestSingleInputFieldContainer(inputNode);
+                String validationText = collectVisibleInputValidationText(fieldContainer);
+                if (validationText.isEmpty()) continue;
+                sawValidation = true;
+
+                String fieldContext = collectInputFieldContext(fieldContainer);
+                if (profileAge <= 0 || !isAgeSemanticInput(inputNode, fieldContext, validationText)) continue;
+
+                String currentDigits = HSQTools.getOnlyDigits(inputNode.getAttribute("text"));
+                String ageValue = String.valueOf(profileAge);
+                if (currentDigits.equals(ageValue)) continue;
+
+                updateNotificationContent("Validator bat field tuoi, sua [" + inputNode.getAttribute("text") + "] -> [" + ageValue + "]");
+                if (replaceVisibleInputValue(inputRect, ageValue, xml)) return 2;
+            }
+
+            return sawValidation ? 1 : 0;
+        }
+        catch (Exception ignored)
+        {
+            return 0;
+        }
+    }
+
+    private org.w3c.dom.Element findXmlEditTextForRect(org.w3c.dom.NodeList nodes, android.graphics.Rect targetRect)
+    {
+        if (nodes == null || targetRect == null) return null;
+        org.w3c.dom.Element best = null;
+        int bestScore = Integer.MAX_VALUE;
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) nodes.item(i);
+            String clazz = node.getAttribute("class");
+            if (clazz == null || (!clazz.contains("EditText") && !clazz.contains("AutoCompleteTextView"))) continue;
+
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+            if (r == null || r.width() <= 0 || r.height() <= 10) continue;
+            int score = Math.abs(r.centerX() - targetRect.centerX())
+                    + Math.abs(r.centerY() - targetRect.centerY())
+                    + Math.abs(r.width() - targetRect.width()) / 4
+                    + Math.abs(r.height() - targetRect.height()) / 4;
+            if (r.equals(targetRect)) score -= 1000;
+            if (r.contains(targetRect.centerX(), targetRect.centerY())) score -= 200;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = node;
+            }
+        }
+        return bestScore <= 500 ? best : null;
+    }
+
+    private org.w3c.dom.Element findNearestSingleInputFieldContainer(org.w3c.dom.Element inputNode)
+    {
+        if (inputNode == null) return null;
+        org.w3c.dom.Element best = inputNode;
+        org.w3c.dom.Node current = inputNode.getParentNode();
+        int depth = 0;
+        while (current instanceof org.w3c.dom.Element && depth < 10)
+        {
+            org.w3c.dom.Element element = (org.w3c.dom.Element) current;
+            int editCount = countEditableXmlDescendants(element);
+            if (editCount > 1) break;
+            if (editCount == 1)
+            {
+                best = element;
+                if (!collectVisibleInputValidationText(element).isEmpty()) return element;
+            }
+            current = current.getParentNode();
+            depth++;
+        }
+        return best;
+    }
+
+    private int countEditableXmlDescendants(org.w3c.dom.Element container)
+    {
+        if (container == null) return 0;
+        int count = 0;
+        if (container.getAttribute("class").contains("EditText")
+                || container.getAttribute("class").contains("AutoCompleteTextView")) count++;
+        org.w3c.dom.NodeList descendants = container.getElementsByTagName("node");
+        for (int i = 0; i < descendants.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) descendants.item(i);
+            String clazz = node.getAttribute("class");
+            if (clazz.contains("EditText") || clazz.contains("AutoCompleteTextView")) count++;
+        }
+        return count;
+    }
+
+    private String collectInputFieldContext(org.w3c.dom.Element container)
+    {
+        if (container == null) return "";
+        StringBuilder context = new StringBuilder();
+        context.append(container.getAttribute("resource-id")).append(' ')
+                .append(container.getAttribute("content-desc")).append(' ');
+        org.w3c.dom.NodeList descendants = container.getElementsByTagName("node");
+        for (int i = 0; i < descendants.getLength() && context.length() < 2400; i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) descendants.item(i);
+            context.append(node.getAttribute("text")).append(' ')
+                    .append(node.getAttribute("content-desc")).append(' ')
+                    .append(node.getAttribute("resource-id")).append(' ');
+        }
+        return context.toString();
+    }
+
+    private String collectVisibleInputValidationText(org.w3c.dom.Element container)
+    {
+        if (container == null) return "";
+        StringBuilder result = new StringBuilder();
+        org.w3c.dom.NodeList descendants = container.getElementsByTagName("node");
+        for (int i = 0; i < descendants.getLength(); i++)
+        {
+            org.w3c.dom.Element node = (org.w3c.dom.Element) descendants.item(i);
+            String rawText = (node.getAttribute("text") + " " + node.getAttribute("content-desc")).trim();
+            if (rawText.isEmpty() || !isInputValidationTextNode(node, rawText)) continue;
+
+            android.graphics.Rect r = HSQTools.parseBoundsFromXml(node.getAttribute("bounds"));
+            if (r == null || r.width() <= 0 || r.height() <= 0) continue;
+            android.graphics.Rect visibleRect = getXmlClippedVisibleRect(node, r);
+            if (!isXmlRectUsablyVisible(visibleRect)) continue;
+
+            if (result.length() > 0) result.append(' ');
+            result.append(rawText);
+        }
+        return result.toString().trim();
+    }
+
+    private boolean isInputValidationTextNode(org.w3c.dom.Element node, String rawText)
+    {
+        String id = node.getAttribute("resource-id").toLowerCase(Locale.ROOT);
+        String clazz = node.getAttribute("class").toLowerCase(Locale.ROOT);
+        boolean errorMeta = id.contains("error") || id.contains("invalid")
+                || clazz.contains("error") || clazz.contains("invalid")
+                || hasXmlAncestorResourceHint(node, "error", "invalid")
+                || hasXmlAncestorClass(node, "error");
+        String compact = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(rawText));
+        boolean validationPhrase = compact.contains("valuemust")
+                || compact.contains("mustbe")
+                || compact.contains("required")
+                || compact.contains("invalid")
+                || compact.contains("pleaseenter")
+                || compact.contains("khonghople")
+                || compact.contains("batbuoc");
+        return errorMeta || validationPhrase;
+    }
+
+    private boolean isAgeSemanticInput(org.w3c.dom.Element inputNode, String fieldContext, String validationText)
+    {
+        if (inputNode == null) return false;
+        String inputMeta = inputNode.getAttribute("resource-id") + " "
+                + inputNode.getAttribute("content-desc") + " "
+                + inputNode.getAttribute("hint");
+        String combined = (fieldContext == null ? "" : fieldContext) + " "
+                + (validationText == null ? "" : validationText);
+        String compactContext = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(combined));
+
+        boolean childContext = compactContext.contains("childage")
+                || compactContext.contains("childrenage")
+                || compactContext.contains("tuoicon")
+                || compactContext.contains("tuoitre")
+                || compactContext.contains("concuaban")
+                || compactContext.contains("treem");
+        if (childContext) return false;
+
+        if (hasExplicitAgeToken(inputMeta)) return true;
+
+        int example = extractNumericValidationExample(validationText);
+        boolean birthContext = compactContext.contains("age")
+                || compactContext.contains("tuoi")
+                || compactContext.contains("birthday")
+                || compactContext.contains("birthdate")
+                || compactContext.contains("dateofbirth")
+                || compactContext.contains("dayofbirth")
+                || compactContext.contains("sinhnhat")
+                || compactContext.contains("ngaysinh")
+                || compactContext.contains("born");
+        return example > 31 && example <= 120 && birthContext;
+    }
+
+    private boolean hasExplicitAgeToken(String rawMeta)
+    {
+        if (rawMeta == null || rawMeta.trim().isEmpty()) return false;
+        String expanded = rawMeta.replaceAll("([a-z0-9])([A-Z])", "$1 $2");
+        String normalized = HSQTools.normalizeText(expanded).toLowerCase(Locale.ROOT);
+        return Pattern.compile("(^|[^a-z])(age|tuoi)([^a-z]|$)").matcher(normalized).find()
+                || HSQTools.getOnlyTextLinq(normalized).contains("yearsold");
+    }
+
+    private int extractNumericValidationExample(String validationText)
+    {
+        if (validationText == null || validationText.trim().isEmpty()) return -1;
+        Matcher quoted = Pattern.compile("[\\\"'\\u2018\\u2019]\\s*(\\d{1,3})\\s*[\\\"'\\u2018\\u2019]").matcher(validationText);
+        if (quoted.find())
+        {
+            try { return Integer.parseInt(quoted.group(1)); } catch (Exception ignored) {}
+        }
+        Matcher example = Pattern.compile("(?i)(?:something\\s+like|for\\s+example|e\\.?g\\.?|vi\\s*du|nhu)[^0-9]{0,20}(\\d{1,3})").matcher(validationText);
+        if (example.find())
+        {
+            try { return Integer.parseInt(example.group(1)); } catch (Exception ignored) {}
+        }
+        return -1;
+    }
+
+    private int getActiveProfileAgeForInput()
+    {
+        if (activeInfoProfile == null) return -1;
+        int age = activeInfoProfile.getAge();
+        if (age > 0 && age <= 120) return age;
+
+        int year = activeInfoProfile.getYearOfBirth();
+        if (year < 1900 || year > 2100) return -1;
+        java.util.Calendar now = java.util.Calendar.getInstance();
+        age = now.get(java.util.Calendar.YEAR) - year;
+        int birthMonth = activeInfoProfile.getMonthOfBirth();
+        int birthDay = activeInfoProfile.getDayOfBirth();
+        if (birthMonth >= 1 && birthMonth <= 12)
+        {
+            int currentMonth = now.get(java.util.Calendar.MONTH) + 1;
+            int currentDay = now.get(java.util.Calendar.DAY_OF_MONTH);
+            if (currentMonth < birthMonth || (currentMonth == birthMonth && birthDay > 0 && currentDay < birthDay)) age--;
+        }
+        return age > 0 && age <= 120 ? age : -1;
+    }
+
+    private boolean replaceVisibleInputValue(android.graphics.Rect inputRect, String value, String xml)
+    {
+        if (inputRect == null || value == null || value.trim().isEmpty()) return false;
+        boolean focused = tryFocusInputForExactBounds(inputRect);
+        delay(1000);
+        boolean keyboardVisible = HSQTools.isKeyboardVisibleSmart();
+        if (!focused || !keyboardVisible)
+        {
+            android.graphics.Point safePoint = findSafeInputTouchPoint(inputRect, xml);
+            click(safePoint.x, safePoint.y, false);
+            delay(2200);
+            keyboardVisible = HSQTools.isKeyboardVisibleSmart();
+        }
+        if (!keyboardVisible) return false;
+
+        clearAllText();
+        delay(500);
+        inputText(value, null, true);
+        delay(1400);
+        globalBack();
+        delay(900);
+        return true;
+    }
+
     private boolean checkNextOK(List<TextBlock> beginClick, String step)
     {
         int checkAgain = 0;
@@ -10282,6 +13846,15 @@ public class StartAuto extends HSQService
         {
             delay(10000);
             List<HSQTools.TextBlock> afterClick = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+            int validationState = handleProfileBackedInputValidationFromXml();
+            if (validationState != 0)
+            {
+                tryNextAgain = 0;
+                updateNotificationContent(validationState == 2
+                        ? "Next bi validator chan, da sua input"
+                        : "Next bi validator chan, khong coi la chuyen trang");
+                return false;
+            }
             if (HSQTools.areAlmostSame(afterClick, beginClick, 5))
             {
                 if (checkAgain < 6)
@@ -10724,7 +14297,7 @@ public class StartAuto extends HSQService
                             if (tb.y > labelBlock.y + 20 && tb.y < heightOfScreen - 200) {
                                 String clean = HSQTools.getOnlyTextLinq(HSQTools.normalizeText(tb.text));
                                 // Loại bỏ mấy nút Next hoặc text rác
-                                if (!clean.matches("^(next|continue|tieptuc|submit|done)$") && !clean.contains("khongynaoneutren") && !clean.contains("noneof")) {
+                                if (!clean.matches("^(next|continue|ketiep|tieptuc|submit|done)$") && !clean.contains("khongynaoneutren") && !clean.contains("noneof")) {
                                     belowTexts.add(tb);
                                 }
                             }
@@ -10830,7 +14403,7 @@ public class StartAuto extends HSQService
         if(slVuot > 0) {
             for(int j = 0; j < slVuot; j++) {
                 if(j == slVuot - 1 && !isdropdown) {
-                    List< HSQTools.TextBlock> smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                    List< HSQTools.TextBlock> smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 430).collect(Collectors.toList());
                     for(int k = 0; k < smartList.size(); k++) {
                         if(HSQTools.getOnlyTextLinq(HSQTools.normalizeText(smartList.get(k).text.toLowerCase())).equals(topText)) {
                             return;
@@ -10843,7 +14416,7 @@ public class StartAuto extends HSQService
             }
             if(!isdropdown)
             {
-                List<HSQTools.TextBlock> smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 180).collect(Collectors.toList());
+                List<HSQTools.TextBlock> smartList = getCheckAnswerSmart().stream().filter(x -> x.y > 430).collect(Collectors.toList());
                 for (int k = 0; k < smartList.size(); k++)
                 {
                     if (HSQTools.getOnlyTextLinq(HSQTools.normalizeText(smartList.get(k).text.toLowerCase())).equals(topText))
